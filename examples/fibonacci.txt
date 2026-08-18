@@ -1,0 +1,18 @@
+// Code to output the nth fibonacci number
+
+
+
+n := <<;
+res := 0;
+
+(n < 0) ? res := -1; // if statement
+: {   // else clause
+    val0 := 0; val1 := 1;
+    (i:=0; i<n; i:=i+1;) @ { // for loop
+        temp := val1;
+        val1 := val0 + val1;
+        val0 := temp;
+    }
+    res := val0;
+}
+>> res;

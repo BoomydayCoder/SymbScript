@@ -1,0 +1,101 @@
+// A program to run Dijkstra's algorithm for SSSP on a weighted undirected graph
+
+// 0 is the starting vertex
+// Enter the number of vertices, the number of edges, and then [u, v, cost] triplets
+// The program returns the distance to each node, or -1 if it's inaccessible
+
+initl := (len, v) => {
+    l := [];
+    (i := 0; i < len; i := i + 1;) @ l :+ v;
+    => l;
+};
+
+initll := (len) => {
+    l := []; (i := 0; i < len; i := i + 1;) @ l :+ [];
+    => l;
+};
+
+swap := (list, i, j) => {
+    temp := list[i];
+    list[i] := list[j];
+    list[j] := temp;
+};
+
+heappush := (heap, value) => {
+    heap :+ value;
+    idx := |heap| - 1;
+    (idx > 0) @ {
+        parent := (idx-1)/2;
+        (heap[idx] >= heap[parent]) ? => 0;
+        swap(heap, idx, parent);
+        idx := parent;
+    }
+};
+
+heappop := (heap) => {
+    // assuming the heap is not empty
+    (|heap| = 1) ? => -heap;
+    minValue := heap[0];
+    heap[0] := -heap;
+
+    idx := 0; // start at the root
+    size := |heap|;
+
+    (1) @ {
+        leftChild := 2*idx + 1;
+        rightChild := 2*idx + 2;
+        smallest := idx;
+
+        (leftChild < size & heap[leftChild] < heap[smallest]) ? smallest := leftChild;
+        
+        (rightChild < size & heap[rightChild] < heap[smallest]) ? smallest := rightChild;
+
+        (smallest=idx) ? => minValue;
+        swap(heap, idx, smallest);
+        idx := smallest;
+
+    }
+    => minValue;
+};
+
+MX := 1000000000;
+
+{    
+    vertices := <<; 
+    edges := <<;
+    adjList := initll(vertices);
+
+    (i := 0; i < edges; i := i + 1;) @ {
+        u := <<; v := <<; cost := <<;
+        adjList[u] :+ [cost, v];
+        adjList[v] :+ [cost, u];
+    }
+
+    dist := initl(vertices, MX);
+    dist[0] := 0;
+
+    hp := [];
+    heappush(hp, [0, 0]);
+    
+
+    (|hp| > 0) @ {
+        cur := heappop(hp);
+        d := cur[0]; u := cur[1];
+        (d <= dist[u]) ? {
+            (pr : adjList[u]) @ {
+                weight := pr[0];
+                v := pr[1];
+                (dist[u] + weight < dist[v]) ? {
+                    dist[v] := dist[u] + weight;
+                    heappush(hp, [dist[v],v]);
+                }
+            }
+        }
+    }
+
+    out := [];
+    (i := 0; i < |dist|; i := i + 1;) @ {
+        (dist[i] = MX) ? out :+ -1; : out :+ dist[i];
+    }
+    >> out;
+}

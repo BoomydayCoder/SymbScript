@@ -1,0 +1,15 @@
+// Program to generate all prime numbers from 1 to n
+
+n := <<;
+
+vec := [0,0];
+primes := [];
+
+(i := 2; i <= n; i := i + 1;) @ vec :+ 1; // initialise sieve list
+
+(i := 2; i <= n; i := i + 1;) @ (vec[i]) ? {
+    primes :+ i;
+    (j := 2*i; j <= n; j := j + i;) @ vec[j] := 0;
+} // run the sieve
+
+>> |primes|; // output the number of primes and the list of primes

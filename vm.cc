@@ -1,0 +1,301 @@
+
+#include "vm.hh"
+
+
+#include <variant>
+#include <algorithm>
+#include "value.hh"
+using namespace std;
+using vptr = vector<Value>*;
+
+VM vm;
+
+
+
+
+#define BINARY_OP(op) do { \
+    if (!peek(0).is_int() || !peek(1).is_int()){ \
+        throw_error("Operands must be integers"); \
+    } \
+    int b = pop().get_int(); \
+    int a = pop().get_int(); \
+    stk.push_back(Value(a op b)); \
+} while (false) // macro to handle binary operations
+
+VM::VM(){
+    
+
+
+    globals.reserve(UINT8_MAX+1);
+    stk.reserve(UINT8_MAX+1);
+    
+}
+
+void VM::init_program(Program& p){
+    prog = &p;
+    
+    
+    ip = prog->code.begin();
+    // output the type of ip
+    
+    
+    
+
+    c_stk.push_back(prog);
+    frames.push_back(0); // the first call frame, naturally, starts at 0
+}
+
+VM::~VM(){
+    
+    
+    for (vector<Value>* l: lists)
+        delete l;
+    for (Program* p: progs){
+        delete p;
+    }
+        
+
+   
+} // we must remember to delete all the lists and programs!!!
+
+Value VM::pop(){
+    Value v = stk.back();
+    stk.pop_back();
+    return v;
+} 
+
+Value VM::peek(int i){
+    return stk[stk.size()-i-1]; 
+}
+
+void VM::print_self(ostream& os){
+    os << "ip: " << ip-prog->code.begin() << endl;
+    os << "stack: ";
+    for(auto v: stk){
+        v.print_self(os);
+        os << " ";
+    }
+    os << endl;
+}
+
+uint16_t VM::read_short(){
+    return (*(ip++))*(1<<8) + (*(ip++));
+}
+
+
+bool VM::run(){
+    
+    for(;ip<prog->code.end();){
+        
+        if (trace_execution) print_self(cerr);
+        switch((*(ip++))){
+            case OP_NULL:
+                stk.push_back(Value());
+                break;
+            case OP_ADD:  // basic operations
+                BINARY_OP(+);
+                break;
+            case OP_SUB:
+                BINARY_OP(-);
+                break;
+            case OP_MUL:
+                BINARY_OP(*);
+                break;
+            case OP_DIV:
+                if (peek(0).get_int() == 0){
+                    throw_error("Division by zero");
+                }
+                BINARY_OP(/);
+                break;
+            case OP_NEG:
+                if (peek(0).is_int()){
+                    stk.push_back(Value(-pop().get_int()));
+                }
+                // if it's a list, pop the last element
+                else if (peek(0).is_list()){
+                    vptr l = pop().get_list();
+                    if (l->size() == 0){
+                        throw_error("List is empty");
+                    }
+                    stk.push_back(l->back());
+                    l->pop_back();
+                }
+                else {
+                    throw_error("Operand must be an integer or a list");
+                }
+                
+                break;
+            case OP_EQ:
+                stk.push_back(Value(pop()==pop()));
+                break;
+            case OP_GRTR:
+                stk.push_back(Value(pop()>pop()));
+                break;
+            case OP_LESS:
+                stk.push_back(Value(pop()<pop()));
+                break;
+            case OP_APP: {
+                Value toapp = pop();
+                if (!peek(0).is_list()){
+                    throw_error("Operand must be a list");
+                }
+                (peek(0).get_list())->push_back(toapp);
+                break;
+            }
+            case OP_NOT:
+                if (!peek(0).is_int()){
+                    throw_error("Operand must be an integer");
+                }
+                stk.push_back(Value(!pop()));  
+                break; 
+            case OP_ABS:
+                // operand must be an int or a list
+                if (peek(0).is_int()){
+                    stk.push_back(Value(abs(pop().get_int())));
+                }
+                else if (peek(0).is_list()){
+                    // return the length of the list
+                    stk.push_back(Value((int)pop().get_list()->size()));
+                }
+                else {
+                    throw_error("Operand must be an integer or a list");
+                }
+                break;
+            case OP_CONST:
+                
+                stk.push_back(prog->consts[(*(ip++))]);
+                break;
+            case OP_LIST :{
+                int n = (*(ip++));
+                vector<Value> l;
+                for(int i=0;i<n;++i){
+                    l.push_back(pop());
+                }
+                reverse(l.begin(), l.end()); // this is needed as the list is built in reverse order
+                stk.push_back(Value(l));
+                break;
+            }
+
+
+            case OP_PRINT:
+                cout << ">> ";
+                pop().print_self(cout); 
+                cout << endl;
+                break;
+            case OP_INPUT:
+                cout << "<< " << flush;
+                int v;
+                cin >> v;
+                stk.push_back(Value(v));
+                break;
+            case OP_POP:
+                stk.pop_back();
+                break;
+
+            case OP_SET_GLOBAL:
+                globals[(*(ip++))] = peek(0);
+                break;
+            case OP_GET_GLOBAL:
+                if (globals.find(*ip) == globals.end()){ // this is needed as globals are late bound
+                    throw_error("Undefined global");
+                } // maybe remove this to speed up language, need to do profiling
+                stk.push_back(globals[(*(ip++))]);
+                break;
+
+            case OP_SET_LOCAL:
+                stk[(*(ip++))+frames.back()] = peek(0);
+                break;
+            case OP_GET_LOCAL:
+                stk.push_back(stk[(*(ip++))+frames.back()]);
+                break;
+            case OP_DEF_LOCAL:
+                stk.push_back(peek(0));
+                break;
+            case OP_GET_IND: {
+                Value vnum = pop(), vlist = pop(); // temporary variables, will be optimised by the compiler
+                if (!vlist.is_list() || !vnum.is_int()){
+                    throw_error("Invalid operation");
+                }
+                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                    throw_error("Index out of bounds");
+                }
+                stk.push_back(vlist.get_list()->at(vnum.get_int()));
+                break;
+            }
+            case OP_SET_IND: { // the value to be set to is at the bottom of the stack
+                Value vval = pop(), vnum = pop(), vlist = pop(); // temporary variables, will be optimised by the compiler
+                if (!vlist.is_list() || !vnum.is_int()){
+                    throw_error("Invalid operation");
+                }
+                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                    throw_error("Index out of bounds");
+                }
+                vlist.get_list()->at(vnum.get_int()) = vval;
+                stk.push_back(vval); // This could be a cause of slowness - check if it's a great performance loss
+                break;
+            }
+            case OP_JMP_F: // note: this does not actually use the c++ if statement - it can be implemented without
+                if (!peek(0).get_int()){
+                    ip += read_short();
+                }
+                else {
+                    read_short();
+                }
+                // ip += (bool(pop())-1)*read_short();  - will benchmark later
+                break;
+            case OP_JMP:
+                ip += read_short(); 
+                break;
+            case OP_LOOP:
+                ip -= read_short(); 
+                break;
+            case OP_CALL: {
+                if (!peek(0).is_func()){
+                    throw_error("Operand must be a function");
+                }
+                Program* p = pop().get_func();
+                uint8_t arity = (*(ip++));
+                if (arity != p->arity){
+                    throw_error("Invalid arity");
+                }
+                frames.push_back(stk.size()-arity);
+                c_stk.push_back(prog);
+                prog = p;
+
+                ips.push_back(ip);
+                ip = p->code.begin();
+                
+                break;
+            }
+
+            case OP_RETURN: {
+                // case: if done in main body
+                if (c_stk.size() == 1){
+                    return 0;
+                }
+                Value ret_val = pop();
+                // remove arity number of arguments from the stack
+                stk.erase(stk.begin()+frames.back(), stk.end());
+                frames.pop_back();
+                ip = ips.back();
+                ips.pop_back();
+                prog = c_stk.back();
+                c_stk.pop_back();
+                stk.push_back(ret_val);
+                break;
+            }
+                
+            default:
+
+                throw_error("Invalid opcode");
+                break;
+        }
+    }
+    
+    return 0;
+}
+
+void VM::throw_error(string msg){
+    cerr << msg << endl;
+    exit(1);
+}

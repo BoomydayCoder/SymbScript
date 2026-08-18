@@ -1,0 +1,62 @@
+
+
+mod := (a,b) => {
+
+
+    => a - b * (a / b);
+};
+lrandom := (n, mx, sd, sd2) => {
+
+    strt := sd;
+    out := [];
+    (i := 0; i < n; i := i + 1;) @ {
+        strt := mod(strt * sd + sd2, mx);
+        out :+ strt;
+    }
+    => out;
+};
+
+merge := (sorted_left, sorted_right) => {
+    lptr := 0; rptr := 0;
+    out := [];
+    (lptr < |sorted_left| & rptr < |sorted_right|) @ {
+        (sorted_left[lptr] < sorted_right[rptr]) ? {
+            out :+ sorted_left[lptr];
+            lptr := lptr + 1;
+        }
+        : {
+            out :+ sorted_right[rptr];
+            rptr := rptr + 1;
+        }
+    }
+    (lptr < |sorted_left|) @ {
+        out :+ sorted_left[lptr];
+        lptr := lptr + 1;
+    }
+    (rptr < |sorted_right|) @ {
+        out :+ sorted_right[rptr];
+        rptr := rptr + 1;
+    }
+    => out;
+};
+
+sort := (list) => {
+    (|list| <= 1) ? => list; // if the size of the list is 0 or 1, return itself
+    mid := |list|/2;
+    left := []; right := [];
+    (i := 0; i < mid; i := i + 1;) @ {
+        left :+ list[i];
+    }
+    (i := mid; i < |list|; i := i + 1;) @ {
+        right :+ list[i];
+    }
+   
+    sorted_left := sort(left);
+    sorted_right := sort(right);
+    => merge(sorted_left,sorted_right);
+    
+};
+lr := lrandom(5000, 65537, 75,74);
+>> sort(lr);
+
+

@@ -1,0 +1,38 @@
+
+
+mod := (a,b) => {
+
+
+    => a - b * (a / b);
+};
+lrandom := (n, mx, sd, sd2) => {
+
+    strt := sd;
+    out := [];
+    (i := 0; i < n; i := i + 1;) @ {
+        strt := mod(strt * sd + sd2, mx);
+        out :+ strt;
+    }
+    => out;
+};
+
+swap := (l, i, j) => {
+    temp := l[i];
+    l[i] := l[j];
+    l[j] := temp;
+};
+
+bubblesort := (l) => {
+    n := |l|;
+    (i := 0; i < n; i := i + 1;) @ {
+        (j := 0; j < n - i - 1; j := j + 1;) @ {
+            (l[j] > l[j + 1]) ? {
+                swap(l, j, j + 1);
+            }
+        }
+    }
+    => l;
+};
+
+lr := lrandom(5000, 65537, 75,74);
+>> bubblesort(lr);

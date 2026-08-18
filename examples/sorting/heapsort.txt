@@ -1,0 +1,82 @@
+
+
+
+mod := (a,b) => {
+
+
+    => a - b * (a / b);
+};
+lrandom := (n, mx, sd, sd2) => {
+
+    strt := sd;
+    out := [];
+    (i := 0; i < n; i := i + 1;) @ {
+        strt := mod(strt * sd + sd2, mx);
+        out :+ strt;
+    }
+    => out;
+};
+
+swap := (list, i, j) => {
+    temp := list[i];
+    list[i] := list[j];
+    list[j] := temp;
+};
+
+heappush := (heap, value) => {
+    heap :+ value;
+    idx := |heap| - 1;
+    (idx > 0) @ {
+        parent := (idx-1)/2;
+        (heap[idx] >= heap[parent]) ? => 0;
+        swap(heap, idx, parent);
+        idx := parent;
+    }
+};
+
+heappop := (heap) => {
+    // assuming the heap is not empty
+    (|heap| = 1) ? => -heap;
+    minValue := heap[0];
+    heap[0] := -heap;
+
+
+    idx := 0; // start at the root
+    size := |heap|;
+
+    (1) @ {
+        leftChild := 2*idx + 1;
+        rightChild := 2*idx + 2;
+        smallest := idx;
+        
+        (leftChild < size & heap[leftChild] < heap[smallest]) ? smallest := leftChild;
+        
+        (rightChild < size & heap[rightChild] < heap[smallest]) ? smallest := rightChild;
+    
+        (smallest=idx) ? => minValue;
+        swap(heap, idx, smallest);
+        idx := smallest;
+
+    }
+    => minValue;
+};
+
+
+
+
+
+
+heapsort := (l) => {
+    hp := [];
+    (x : l) @ heappush(hp, x);
+    out := [];
+    n := |l|;
+    (x := 0; x < n; x := x + 1;) @ {
+        out :+ heappop(hp);
+    }
+    => out;
+};
+
+lr := lrandom(5000, 65537, 75,74);
+
+>> heapsort(lr);
