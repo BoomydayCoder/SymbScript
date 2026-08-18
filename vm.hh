@@ -16,15 +16,18 @@ class VM {
         uint16_t read_short();
 
     public:
+        struct CallFrame {
+            Program* caller;
+            vector<uint8_t>::iterator return_ip;
+            size_t stack_start;
+        };
+
         VM ();
         ~VM();
         
 
         Program* prog;
         vector<uint8_t>::iterator ip; // the instruction pointer
-
-        vector<Program*> c_stk; // the call stack
-        vector<vector<uint8_t>::iterator> ips; // the instruction pointer
 
         vector<Value> stk; // the value stack
         vector<Value> globals; // globals are compiled to direct byte-sized indices
@@ -33,7 +36,7 @@ class VM {
         vector<vector<Value>*> lists; // we need to keep track of all the lists to delete them later
         vector<Program*> progs; // we need to keep track of all the functions to delete them later
 
-        vector<int> frames; // stores the position of the current call frame in the stack
+        vector<CallFrame> frames;
 
         bool run(); // 0: success, 1: error
 

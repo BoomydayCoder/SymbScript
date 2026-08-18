@@ -38,8 +38,7 @@ void VM::init_program(Program& p, size_t global_count){
     
     
 
-    c_stk.push_back(prog);
-    frames.push_back(0); // the first call frame, naturally, starts at 0
+    frames.push_back({nullptr, {}, 0});
 }
 
 VM::~VM(){
@@ -204,10 +203,10 @@ bool VM::run(){
             }
 
             case OP_SET_LOCAL:
-                stk[(*(ip++))+frames.back()] = peek(0);
+                stk[(*(ip++))+frames.back().stack_start] = peek(0);
                 break;
             case OP_GET_LOCAL:
-                stk.push_back(stk[(*(ip++))+frames.back()]);
+                stk.push_back(stk[(*(ip++))+frames.back().stack_start]);
                 break;
             case OP_DEF_LOCAL:
                 stk.push_back(peek(0));
@@ -259,11 +258,8 @@ bool VM::run(){
                 if (arity != p->arity){
                     throw_error("Invalid arity");
                 }
-                frames.push_back(stk.size()-arity);
-                c_stk.push_back(prog);
+                frames.push_back({prog, ip, stk.size()-arity});
                 prog = p;
-
-                ips.push_back(ip);
                 ip = p->code.begin();
                 
                 break;
@@ -271,17 +267,15 @@ bool VM::run(){
 
             case OP_RETURN: {
                 // case: if done in main body
-                if (c_stk.size() == 1){
+                if (frames.size() == 1){
                     return 0;
                 }
                 Value ret_val = pop();
-                // remove arity number of arguments from the stack
-                stk.erase(stk.begin()+frames.back(), stk.end());
+                const CallFrame frame = frames.back();
+                stk.resize(frame.stack_start);
                 frames.pop_back();
-                ip = ips.back();
-                ips.pop_back();
-                prog = c_stk.back();
-                c_stk.pop_back();
+                prog = frame.caller;
+                ip = frame.return_ip;
                 stk.push_back(ret_val);
                 break;
             }
