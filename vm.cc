@@ -42,10 +42,6 @@ void VM::init_program(Program& p, size_t global_count){
 }
 
 VM::~VM(){
-    
-    
-    for (vector<Value>* l: lists)
-        delete l;
     for (Program* p: progs){
         delete p;
     }
@@ -53,6 +49,11 @@ VM::~VM(){
 
    
 } // we must remember to delete all the lists and programs!!!
+
+vector<Value>* VM::allocate_list(vector<Value>&& values){
+    list_pool.emplace_back(std::move(values));
+    return &list_pool.back();
+}
 
 Value VM::pop(){
     Value v = stk.back();

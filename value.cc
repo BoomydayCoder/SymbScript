@@ -44,8 +44,7 @@ Value::Value(Program p): type(V_FUNC){
 }
 
 Value::Value(vector<Value>&& v): type(V_LIST){
-    val.l = new vector<Value>(std::move(v));
-    vm.lists.push_back(val.l);
+    val.l = vm.allocate_list(std::move(v));
 }
 
 int Value::get_int() const{

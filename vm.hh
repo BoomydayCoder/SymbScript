@@ -3,6 +3,7 @@
 
 #include "program.hh"
 #include "value.hh"
+#include <deque>
 #include <vector>
 #include <iostream>
 using namespace std;
@@ -33,7 +34,7 @@ class VM {
         vector<Value> globals; // globals are compiled to direct byte-sized indices
         vector<uint8_t> global_defined; // preserves late-bound undefined-global errors
 
-        vector<vector<Value>*> lists; // we need to keep track of all the lists to delete them later
+        deque<vector<Value>> list_pool; // stable, amortised storage for list objects
         vector<Program*> progs; // we need to keep track of all the functions to delete them later
 
         vector<CallFrame> frames;
@@ -44,6 +45,8 @@ class VM {
         void print_self(ostream& os);
 
         void throw_error(string msg);
+
+        vector<Value>* allocate_list(vector<Value>&& values);
 
         void init_program(Program& p, size_t global_count);
 };
