@@ -89,6 +89,9 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_APP:
                 os << "OP_APP" << endl;
                 break;
+            case OP_APP_POP:
+                os << "OP_APP_POP" << endl;
+                break;
             case OP_NOT:
                 os << "OP_NOT" << endl;
                 break;
@@ -112,11 +115,17 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_SET_GLOBAL:
                 os << "OP_SET_GLOBAL " << (int)code[++i] << endl;
                 break;
+            case OP_SET_GLOBAL_POP:
+                os << "OP_SET_GLOBAL_POP " << (int)code[++i] << endl;
+                break;
             case OP_GET_GLOBAL:
                 os << "OP_GET_GLOBAL " << (int)code[++i] << endl;
                 break;
             case OP_SET_LOCAL:
                 os << "OP_SET_LOCAL " << (int)code[++i] << endl;
+                break;
+            case OP_SET_LOCAL_POP:
+                os << "OP_SET_LOCAL_POP " << (int)code[++i] << endl;
                 break;
             case OP_GET_LOCAL:
                 os << "OP_GET_LOCAL " << (int)code[++i] << endl;
@@ -127,11 +136,17 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_SET_IND:
                 os << "OP_SET_IND" << endl;
                 break;
+            case OP_SET_IND_POP:
+                os << "OP_SET_IND_POP" << endl;
+                break;
             case OP_GET_IND:
                 os << "OP_GET_IND" << endl;
                 break;
             case OP_JMP_F:
                 os << "OP_JMP_F " << (int)code[++i]*(1<<8) + (int)code[++i] + 3 << endl;
+                break;
+            case OP_JMP_F_POP:
+                os << "OP_JMP_F_POP " << (int)code[++i]*(1<<8) + (int)code[++i] + 3 << endl;
                 break;
             case OP_JMP:
                 os << "OP_JMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 3 << endl;

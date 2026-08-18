@@ -203,7 +203,31 @@ void Compiler::compile(Ast* exp){
             break;
         case EXP:
             compile(exp->ch[0]);
-            prog.push_byte(OP_POP); // Make sure to pop result of expression statement from the stack
+            // Assignment and append statements can discard their result as part of
+            // the operation instead of executing a separate OP_POP.
+            if (exp->ch[0]->type == SET){
+                if (exp->ch[0]->ch[0]->type == IND){
+                    prog.code.back() = OP_SET_IND_POP;
+                }
+                else if (prog.code.back() == OP_DEF_LOCAL){
+                    prog.code.pop_back(); // the existing RHS becomes the local slot
+                }
+                else if (prog.code.size() >= 2 && prog.code[prog.code.size()-2] == OP_SET_LOCAL){
+                    prog.code[prog.code.size()-2] = OP_SET_LOCAL_POP;
+                }
+                else if (prog.code.size() >= 2 && prog.code[prog.code.size()-2] == OP_SET_GLOBAL){
+                    prog.code[prog.code.size()-2] = OP_SET_GLOBAL_POP;
+                }
+                else {
+                    prog.push_byte(OP_POP);
+                }
+            }
+            else if (exp->ch[0]->type == APP){
+                prog.code.back() = OP_APP_POP;
+            }
+            else {
+                prog.push_byte(OP_POP);
+            }
             break;
 
         case SET:
@@ -242,8 +266,7 @@ void Compiler::compile(Ast* exp){
             begin_scope();
 
             compile(exp->ch[0]);
-            int j_else = prog.push_jump(OP_JMP_F);
-            prog.push_byte(OP_POP); // pop condition off the stack
+            int j_else = prog.push_jump(OP_JMP_F_POP);
 
             begin_scope(); 
             compile(exp->ch[1]); // then block
@@ -252,7 +275,6 @@ void Compiler::compile(Ast* exp){
             int j_end = prog.push_jump(OP_JMP); // jump to end after then block
 
             prog.patch_jump(j_else); // begin else block
-            prog.push_byte(OP_POP); // pop condition off the stack, ready to enter else block
 
             begin_scope();
             compile(exp->ch[2]); // else block
@@ -289,8 +311,7 @@ void Compiler::compile(Ast* exp){
 
             int loop_start = prog.code.size();
             compile(exp->ch[0]); // condition
-            int j_end = prog.push_jump(OP_JMP_F);
-            prog.push_byte(OP_POP); // pop condition off stack
+            int j_end = prog.push_jump(OP_JMP_F_POP);
 
             begin_scope();
             compile(exp->ch[1]);
@@ -299,7 +320,6 @@ void Compiler::compile(Ast* exp){
             prog.push_loop(loop_start); // loop to beginning
 
             prog.patch_jump(j_end);
-            prog.push_byte(OP_POP); // pop condition off stack
 
             end_scope();
             break;
@@ -310,8 +330,7 @@ void Compiler::compile(Ast* exp){
 
             int loop_start = prog.code.size();
             compile(exp->ch[1]); // condition
-            int j_end = prog.push_jump(OP_JMP_F);
-            prog.push_byte(OP_POP); // pop condition off stack
+            int j_end = prog.push_jump(OP_JMP_F_POP);
 
             begin_scope();
             compile(exp->ch[3]); // body
@@ -320,7 +339,6 @@ void Compiler::compile(Ast* exp){
             prog.push_loop(loop_start); // loop to start
 
             prog.patch_jump(j_end);
-            prog.push_byte(OP_POP); // pop condition off stack
             end_scope();
             break;
         }
@@ -353,8 +371,7 @@ void Compiler::compile(Ast* exp){
             prog.push_byte(OP_ABS);
             prog.push_byte(OP_LESS);
 
-            int j_end = prog.push_jump(OP_JMP_F);
-            prog.push_byte(OP_POP); // pop condition off stack
+            int j_end = prog.push_jump(OP_JMP_F_POP);
 
             begin_scope();
             // name := list[loop_name]
@@ -381,7 +398,6 @@ void Compiler::compile(Ast* exp){
             prog.push_loop(loop_start); // loop to start    
 
             prog.patch_jump(j_end);
-            prog.push_byte(OP_POP); // pop condition off stack
 
 
             

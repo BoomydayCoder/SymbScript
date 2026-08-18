@@ -138,6 +138,15 @@ bool VM::run(){
                 (peek(0).get_list())->push_back(toapp);
                 break;
             }
+            case OP_APP_POP: {
+                Value toapp = pop();
+                Value list = pop();
+                if (!list.is_list()){
+                    throw_error("Operand must be a list");
+                }
+                list.get_list()->push_back(toapp);
+                break;
+            }
             case OP_NOT:
                 if (!peek(0).is_int()){
                     throw_error("Operand must be an integer");
@@ -193,6 +202,12 @@ bool VM::run(){
                 global_defined[index] = 1;
                 break;
             }
+            case OP_SET_GLOBAL_POP: {
+                const uint8_t index = *(ip++);
+                globals[index] = pop();
+                global_defined[index] = 1;
+                break;
+            }
             case OP_GET_GLOBAL: {
                 const uint8_t index = *(ip++);
                 if (!global_defined[index]){ // globals remain late bound
@@ -205,6 +220,12 @@ bool VM::run(){
             case OP_SET_LOCAL:
                 stk[(*(ip++))+frames.back().stack_start] = peek(0);
                 break;
+            case OP_SET_LOCAL_POP: {
+                const uint8_t index = *(ip++);
+                const Value value = pop();
+                stk[index+frames.back().stack_start] = value;
+                break;
+            }
             case OP_GET_LOCAL:
                 stk.push_back(stk[(*(ip++))+frames.back().stack_start]);
                 break;
@@ -234,6 +255,17 @@ bool VM::run(){
                 stk.push_back(vval); // This could be a cause of slowness - check if it's a great performance loss
                 break;
             }
+            case OP_SET_IND_POP: {
+                Value vval = pop(), vnum = pop(), vlist = pop();
+                if (!vlist.is_list() || !vnum.is_int()){
+                    throw_error("Invalid operation");
+                }
+                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                    throw_error("Index out of bounds");
+                }
+                vlist.get_list()->at(vnum.get_int()) = vval;
+                break;
+            }
             case OP_JMP_F: // note: this does not actually use the c++ if statement - it can be implemented without
                 if (!peek(0).get_int()){
                     ip += read_short();
@@ -243,6 +275,14 @@ bool VM::run(){
                 }
                 // ip += (bool(pop())-1)*read_short();  - will benchmark later
                 break;
+            case OP_JMP_F_POP: {
+                const bool condition = pop().get_int();
+                const uint16_t offset = read_short();
+                if (!condition){
+                    ip += offset;
+                }
+                break;
+            }
             case OP_JMP:
                 ip += read_short(); 
                 break;
