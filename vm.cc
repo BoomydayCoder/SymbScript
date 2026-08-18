@@ -51,8 +51,92 @@ VM::~VM(){
 } // we must remember to delete all the lists and programs!!!
 
 vector<Value>* VM::allocate_list(vector<Value>&& values){
-    list_pool.emplace_back(std::move(values));
-    return &list_pool.back();
+    if (active_lists + 1 > next_gc){
+        collect_garbage(&values);
+    }
+
+    ListObject* object;
+    if (free_lists.empty()){
+        list_pool.push_back({std::move(values), false, true});
+        object = &list_pool.back();
+        list_lookup[&object->values] = object;
+    }
+    else {
+        object = free_lists.back();
+        free_lists.pop_back();
+        if (values.empty()){
+            object->values.clear();
+        }
+        else {
+            object->values = std::move(values);
+        }
+        object->marked = false;
+        object->in_use = true;
+    }
+    ++active_lists;
+    return &object->values;
+}
+
+void VM::mark_program(Program* program, unordered_set<Program*>& marked_programs){
+    if (program == nullptr || !marked_programs.insert(program).second){
+        return;
+    }
+    for (const Value& value: program->consts){
+        mark_value(value, marked_programs);
+    }
+}
+
+void VM::mark_value(const Value& value, unordered_set<Program*>& marked_programs){
+    if (value.is_list()){
+        auto found = list_lookup.find(value.get_list());
+        if (found == list_lookup.end() || !found->second->in_use || found->second->marked){
+            return;
+        }
+        ListObject* object = found->second;
+        object->marked = true;
+        for (const Value& element: object->values){
+            mark_value(element, marked_programs);
+        }
+    }
+    else if (value.is_func()){
+        mark_program(value.get_func(), marked_programs);
+    }
+}
+
+void VM::collect_garbage(const vector<Value>* extra_roots){
+    unordered_set<Program*> marked_programs;
+    for (const Value& value: stk){
+        mark_value(value, marked_programs);
+    }
+    for (size_t i = 0; i < globals.size(); ++i){
+        if (global_defined[i]){
+            mark_value(globals[i], marked_programs);
+        }
+    }
+    if (extra_roots != nullptr){
+        for (const Value& value: *extra_roots){
+            mark_value(value, marked_programs);
+        }
+    }
+    mark_program(prog, marked_programs);
+    for (const CallFrame& frame: frames){
+        mark_program(frame.caller, marked_programs);
+    }
+
+    for (ListObject& object: list_pool){
+        if (!object.in_use){
+            continue;
+        }
+        if (object.marked){
+            object.marked = false;
+            continue;
+        }
+        object.values.clear();
+        object.in_use = false;
+        free_lists.push_back(&object);
+        --active_lists;
+    }
+    next_gc = max<size_t>(1024, active_lists * 2);
 }
 
 Value VM::pop(){
