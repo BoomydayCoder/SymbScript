@@ -77,11 +77,20 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_EQ:
                 os << "OP_EQ" << endl;
                 break;
+            case OP_NE:
+                os << "OP_NE" << endl;
+                break;
             case OP_GRTR:
                 os << "OP_GRTR" << endl;
                 break;
+            case OP_GE:
+                os << "OP_GE" << endl;
+                break;
             case OP_LESS:
                 os << "OP_LESS" << endl;
+                break;
+            case OP_LE:
+                os << "OP_LE" << endl;
                 break;
             case OP_ABS:
                 os << "OP_ABS" << endl;

@@ -133,23 +133,20 @@ void Compiler::compile(Ast* exp){
             compile(exp->ch[1]);
             prog.push_byte(OP_LESS);
             break;
-        case GE: // not less
+        case GE:
             compile(exp->ch[0]);
             compile(exp->ch[1]);
-            prog.push_byte(OP_LESS);
-            prog.push_byte(OP_NOT);
+            prog.push_byte(OP_GE);
             break;
-        case LE: // not greater
+        case LE:
             compile(exp->ch[0]);
             compile(exp->ch[1]);
-            prog.push_byte(OP_GRTR);
-            prog.push_byte(OP_NOT);
+            prog.push_byte(OP_LE);
             break;
-        case NE: // not equal
+        case NE:
             compile(exp->ch[0]);
             compile(exp->ch[1]);
-            prog.push_byte(OP_EQ);
-            prog.push_byte(OP_NOT);
+            prog.push_byte(OP_NE);
             break;
         case APP:
             compile(exp->ch[0]);
@@ -157,8 +154,28 @@ void Compiler::compile(Ast* exp){
             prog.push_byte(OP_APP);
             break;
         case NOT:
-            compile(exp->ch[0]);
-            prog.push_byte(OP_NOT);
+            // Peephole comparison inversion avoids materialising and then
+            // negating an intermediate boolean.
+            switch (exp->ch[0]->type){
+                case EQ: case NE: case GT: case LT: case GE: case LE: {
+                    compile(exp->ch[0]->ch[0]);
+                    compile(exp->ch[0]->ch[1]);
+                    switch (exp->ch[0]->type){
+                        case EQ: prog.push_byte(OP_NE); break;
+                        case NE: prog.push_byte(OP_EQ); break;
+                        case GT: prog.push_byte(OP_LE); break;
+                        case LT: prog.push_byte(OP_GE); break;
+                        case GE: prog.push_byte(OP_LESS); break;
+                        case LE: prog.push_byte(OP_GRTR); break;
+                        default: break;
+                    }
+                    break;
+                }
+                default:
+                    compile(exp->ch[0]);
+                    prog.push_byte(OP_NOT);
+                    break;
+            }
             break;
         case ABS:
             compile(exp->ch[0]);

@@ -8,7 +8,8 @@
 using namespace std;
 
 enum op_code {
-    OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_EQ, OP_LESS, OP_GRTR, OP_NOT, OP_NEG, OP_ABS,
+    OP_ADD, OP_SUB, OP_MUL, OP_DIV,
+    OP_EQ, OP_NE, OP_LESS, OP_LE, OP_GRTR, OP_GE, OP_NOT, OP_NEG, OP_ABS,
     OP_APP, OP_APP_POP,
     OP_CONST, OP_NULL, OP_LIST,
     OP_PRINT, OP_INPUT, 

@@ -121,15 +121,42 @@ bool VM::run(){
                 }
                 
                 break;
-            case OP_EQ:
-                stk.push_back(Value(pop()==pop()));
+            case OP_EQ: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(a == b));
                 break;
-            case OP_GRTR:
-                stk.push_back(Value(pop()>pop()));
+            }
+            case OP_NE: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(!(a == b)));
                 break;
-            case OP_LESS:
-                stk.push_back(Value(pop()<pop()));
+            }
+            case OP_GRTR: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(a > b));
                 break;
+            }
+            case OP_GE: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(!(a < b)));
+                break;
+            }
+            case OP_LESS: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(a < b));
+                break;
+            }
+            case OP_LE: {
+                const Value b = pop();
+                const Value a = pop();
+                stk.push_back(Value(!(a > b)));
+                break;
+            }
             case OP_APP: {
                 Value toapp = pop();
                 if (!peek(0).is_list()){
