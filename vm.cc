@@ -22,6 +22,18 @@ VM vm;
     stk.push_back(Value(a op b)); \
 } while (false) // macro to handle binary operations
 
+static inline bool compare_values(const Value& a, const Value& b, uint8_t operation){
+    switch (operation){
+        case OP_EQ: return a == b;
+        case OP_NE: return !(a == b);
+        case OP_GRTR: return a > b;
+        case OP_GE: return !(a < b);
+        case OP_LESS: return a < b;
+        case OP_LE: return !(a > b);
+        default: return false;
+    }
+}
+
 VM::VM(){
     stk.reserve(UINT8_MAX+1);
 }
@@ -187,6 +199,7 @@ bool VM::run(){
             &&dispatch_abs_local, &&dispatch_compare_local,
             &&dispatch_get_ind_local, &&dispatch_get_ind_local_offset,
             &&dispatch_copy_ind_local, &&dispatch_set_ind_local_value,
+            &&dispatch_jump_false_local_cmp, &&dispatch_jump_false_ind_cmp,
             &&dispatch_switch, &&dispatch_switch,
         };
         goto *dispatch_table[opcode];
@@ -533,6 +546,47 @@ dispatch_switch:
                 stk.push_back(Value(result));
                 break;
             }
+            case OP_JMP_FALSE_LOCAL_CMP: {
+                const uint16_t offset = read_short();
+                const uint8_t left_local = *(ip++);
+                const uint8_t right_local = *(ip++);
+                const uint8_t operation = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                if (!compare_values(stk[frame+left_local], stk[frame+right_local], operation)){
+                    ip += offset;
+                }
+                break;
+            }
+            case OP_JMP_FALSE_IND_CMP: {
+                const uint16_t offset = read_short();
+                const uint8_t list_local = *(ip++);
+                const uint8_t left_local = *(ip++);
+                const int left_offset = static_cast<int8_t>(*(ip++));
+                const uint8_t right_local = *(ip++);
+                const int right_offset = static_cast<int8_t>(*(ip++));
+                const uint8_t operation = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                const Value& list_value = stk[frame+list_local];
+                const Value& left_value = stk[frame+left_local];
+                const Value& right_value = stk[frame+right_local];
+                if (!list_value.is_list() || !left_value.is_int() || !right_value.is_int()){
+                    throw_error("Invalid operation");
+                }
+                vector<Value>* const list = list_value.get_list();
+                const int left = left_value.get_int()+left_offset;
+                if (left < 0 || static_cast<size_t>(left) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                const Value left_element = (*list)[left];
+                const int right = right_value.get_int()+right_offset;
+                if (right < 0 || static_cast<size_t>(right) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                if (!compare_values(left_element, (*list)[right], operation)){
+                    ip += offset;
+                }
+                break;
+            }
             case OP_JMP_F: // note: this does not actually use the c++ if statement - it can be implemented without
                 if (!peek(0).get_int()){
                     ip += read_short();
@@ -801,6 +855,49 @@ dispatch_set_ind_local_value: {
             throw_error("Index out of bounds");
         }
         (*list)[target] = copied;
+        continue;
+    }
+
+dispatch_jump_false_local_cmp: {
+        const uint16_t offset = read_short();
+        const uint8_t left_local = *(ip++);
+        const uint8_t right_local = *(ip++);
+        const uint8_t operation = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        if (!compare_values(stk[frame+left_local], stk[frame+right_local], operation)){
+            ip += offset;
+        }
+        continue;
+    }
+
+dispatch_jump_false_ind_cmp: {
+        const uint16_t offset = read_short();
+        const uint8_t list_local = *(ip++);
+        const uint8_t left_local = *(ip++);
+        const int left_offset = static_cast<int8_t>(*(ip++));
+        const uint8_t right_local = *(ip++);
+        const int right_offset = static_cast<int8_t>(*(ip++));
+        const uint8_t operation = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        const Value& list_value = stk[frame+list_local];
+        const Value& left_value = stk[frame+left_local];
+        const Value& right_value = stk[frame+right_local];
+        if (!list_value.is_list() || !left_value.is_int() || !right_value.is_int()){
+            throw_error("Invalid operation");
+        }
+        vector<Value>* const list = list_value.get_list();
+        const int left = left_value.get_int()+left_offset;
+        if (left < 0 || static_cast<size_t>(left) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        const Value left_element = (*list)[left];
+        const int right = right_value.get_int()+right_offset;
+        if (right < 0 || static_cast<size_t>(right) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        if (!compare_values(left_element, (*list)[right], operation)){
+            ip += offset;
+        }
         continue;
     }
 #endif

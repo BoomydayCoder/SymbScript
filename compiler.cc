@@ -33,6 +33,64 @@ bool Compiler::small_integer(Ast* expression, int8_t& value) const{
     return true;
 }
 
+bool Compiler::local_index_operand(Ast* expression, uint8_t& index, int8_t& offset) const{
+    offset = 0;
+    if (local_operand(expression, index)){
+        return true;
+    }
+    if (expression->type != ADD && expression->type != SUB){
+        return false;
+    }
+    if (!local_operand(expression->ch[0], index) || !small_integer(expression->ch[1], offset)){
+        return false;
+    }
+    if (expression->type == SUB){
+        if (offset == INT8_MIN){
+            return false;
+        }
+        offset = -offset;
+    }
+    return true;
+}
+
+int Compiler::push_condition_jump(Ast* condition){
+    uint8_t comparison;
+    switch (condition->type){
+        case EQ: comparison = OP_EQ; break;
+        case NE: comparison = OP_NE; break;
+        case GT: comparison = OP_GRTR; break;
+        case GE: comparison = OP_GE; break;
+        case LT: comparison = OP_LESS; break;
+        case LE: comparison = OP_LE; break;
+        default:
+            compile(condition);
+            return prog.push_jump(OP_JMP_F_POP);
+    }
+
+    uint8_t left, right;
+    if (local_operand(condition->ch[0], left) && local_operand(condition->ch[1], right)){
+        return prog.push_local_compare_jump(left, right, comparison);
+    }
+
+    Ast* left_expression = condition->ch[0];
+    Ast* right_expression = condition->ch[1];
+    if (left_expression->type == IND && right_expression->type == IND){
+        uint8_t left_list, right_list, left_index, right_index;
+        int8_t left_offset, right_offset;
+        if (local_operand(left_expression->ch[0], left_list)
+                && local_operand(right_expression->ch[0], right_list)
+                && left_list == right_list
+                && local_index_operand(left_expression->ch[1], left_index, left_offset)
+                && local_index_operand(right_expression->ch[1], right_index, right_offset)){
+            return prog.push_index_compare_jump(left_list, left_index, left_offset,
+                                                right_index, right_offset, comparison);
+        }
+    }
+
+    compile(condition);
+    return prog.push_jump(OP_JMP_F_POP);
+}
+
 bool Compiler::try_superinstruction(Ast* expression){
     if (expression->type == SET && expression->ch[0]->type == ID){
         uint8_t target;
@@ -542,8 +600,7 @@ void Compiler::compile(Ast* exp){
 
             begin_scope();
 
-            compile(exp->ch[0]);
-            int j_else = prog.push_jump(OP_JMP_F_POP);
+            int j_else = push_condition_jump(exp->ch[0]);
 
             begin_scope(); 
             compile(exp->ch[1]); // then block
@@ -587,8 +644,7 @@ void Compiler::compile(Ast* exp){
             begin_scope();
 
             int loop_start = prog.code.size();
-            compile(exp->ch[0]); // condition
-            int j_end = prog.push_jump(OP_JMP_F_POP);
+            int j_end = push_condition_jump(exp->ch[0]);
 
             begin_scope();
             compile(exp->ch[1]);
@@ -606,8 +662,7 @@ void Compiler::compile(Ast* exp){
             compile(exp->ch[0]); // initialiser
 
             int loop_start = prog.code.size();
-            compile(exp->ch[1]); // condition
-            int j_end = prog.push_jump(OP_JMP_F_POP);
+            int j_end = push_condition_jump(exp->ch[1]);
 
             begin_scope();
             compile(exp->ch[3]); // body

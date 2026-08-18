@@ -22,6 +22,7 @@ enum op_code {
     OP_ADD_LOCAL_IMM, OP_INC_LOCAL, OP_ABS_LOCAL,
     OP_CMP_LOCAL_LOCAL, OP_GET_IND_LOCAL, OP_GET_IND_LOCAL_OFFSET,
     OP_COPY_IND_LOCAL, OP_SET_IND_LOCAL_VALUE,
+    OP_JMP_FALSE_LOCAL_CMP, OP_JMP_FALSE_IND_CMP,
     OP_RETURN, OP_CALL,
     OP_COUNT,
 }; // the bytecode operations
@@ -40,6 +41,9 @@ class Program {
 
         void push_byte(uint8_t b); 
         int push_jump(uint8_t b); // add the instructions required for a byte or a jump
+        int push_local_compare_jump(uint8_t left, uint8_t right, uint8_t comparison);
+        int push_index_compare_jump(uint8_t list, uint8_t left, int8_t left_offset,
+                                    uint8_t right, int8_t right_offset, uint8_t comparison);
 
         void push_loop(int loop_start); // add the instructions required for a loop
         void push_const(Value v); // add a constant 

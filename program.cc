@@ -16,6 +16,32 @@ int Program::push_jump(uint8_t b){
     return sz;
 }
 
+int Program::push_local_compare_jump(uint8_t left, uint8_t right, uint8_t comparison){
+    const int start = code.size();
+    code.push_back(OP_JMP_FALSE_LOCAL_CMP);
+    code.push_back(OP_NULL);
+    code.push_back(OP_NULL);
+    code.push_back(left);
+    code.push_back(right);
+    code.push_back(comparison);
+    return start;
+}
+
+int Program::push_index_compare_jump(uint8_t list, uint8_t left, int8_t left_offset,
+                                     uint8_t right, int8_t right_offset, uint8_t comparison){
+    const int start = code.size();
+    code.push_back(OP_JMP_FALSE_IND_CMP);
+    code.push_back(OP_NULL);
+    code.push_back(OP_NULL);
+    code.push_back(list);
+    code.push_back(left);
+    code.push_back(static_cast<uint8_t>(left_offset));
+    code.push_back(right);
+    code.push_back(static_cast<uint8_t>(right_offset));
+    code.push_back(comparison);
+    return start;
+}
+
 void Program::push_loop(int loop_start){
     int s = code.size() - loop_start + 3; // account for the size of the jump instruction
     if (s > UINT16_MAX){
@@ -44,8 +70,14 @@ void Program::push_short(uint16_t s, int loc){
 }
 
 void Program::patch_jump(int jmp_start){
-    int s =  code.size() - jmp_start;
-    s -= 3; // account for the size of the jump instruction
+    int instruction_size = 3;
+    if (code[jmp_start] == OP_JMP_FALSE_LOCAL_CMP){
+        instruction_size = 6;
+    }
+    else if (code[jmp_start] == OP_JMP_FALSE_IND_CMP){
+        instruction_size = 9;
+    }
+    int s = code.size() - jmp_start - instruction_size;
     if (s > UINT16_MAX){
         cerr << "Jump too far" << endl;
         exit(1);
@@ -187,6 +219,17 @@ void Program::print_self(ostream& os){ // print out the generated program
                 break;
             case OP_JMP_F_POP:
                 os << "OP_JMP_F_POP " << (int)code[++i]*(1<<8) + (int)code[++i] + 3 << endl;
+                break;
+            case OP_JMP_FALSE_LOCAL_CMP:
+                os << "OP_JMP_FALSE_LOCAL_CMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 6
+                   << " " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)code[++i] << endl;
+                break;
+            case OP_JMP_FALSE_IND_CMP:
+                os << "OP_JMP_FALSE_IND_CMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 9
+                   << " " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << " " << (int)code[++i] << endl;
                 break;
             case OP_JMP:
                 os << "OP_JMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 3 << endl;
