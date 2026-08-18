@@ -43,6 +43,9 @@ class Compiler { // A class that represents the compiler as it compiles the code
 
     private:
         bool try_inline_call(Ast* callee, Ast* arguments);
+        bool try_superinstruction(Ast* expression);
+        bool local_operand(Ast* expression, uint8_t& index) const;
+        bool small_integer(Ast* expression, int8_t& value) const;
         bool has_return(Ast* exp) const;
 };
 #endif

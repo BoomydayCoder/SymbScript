@@ -53,9 +53,9 @@ class Value {
         
 
 
-        bool is_int();
-        bool is_list();
-        bool is_func();
+        bool is_int() const;
+        bool is_list() const;
+        bool is_func() const;
 
         int get_int() const;
         vector<Value>* get_list() const;

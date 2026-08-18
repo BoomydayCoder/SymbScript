@@ -92,6 +92,26 @@ bool VM::run(){
             case OP_ADD:  // basic operations
                 BINARY_OP(+);
                 break;
+            case OP_ADD_LOCAL_IMM: {
+                const uint8_t index = *(ip++);
+                const int amount = static_cast<int8_t>(*(ip++));
+                const Value& value = stk[frames.back().stack_start+index];
+                if (!value.is_int()){
+                    throw_error("Operands must be integers");
+                }
+                stk.push_back(Value(value.get_int()+amount));
+                break;
+            }
+            case OP_INC_LOCAL: {
+                const uint8_t index = *(ip++);
+                const int amount = static_cast<int8_t>(*(ip++));
+                Value& value = stk[frames.back().stack_start+index];
+                if (!value.is_int()){
+                    throw_error("Operands must be integers");
+                }
+                value.val.i += amount;
+                break;
+            }
             case OP_SUB:
                 BINARY_OP(-);
                 break;
@@ -194,6 +214,20 @@ bool VM::run(){
                     throw_error("Operand must be an integer or a list");
                 }
                 break;
+            case OP_ABS_LOCAL: {
+                const uint8_t index = *(ip++);
+                const Value& value = stk[frames.back().stack_start+index];
+                if (value.is_int()){
+                    stk.push_back(Value(abs(value.get_int())));
+                }
+                else if (value.is_list()){
+                    stk.push_back(Value(static_cast<int>(value.get_list()->size())));
+                }
+                else {
+                    throw_error("Operand must be an integer or a list");
+                }
+                break;
+            }
             case OP_CONST:
                 
                 stk.push_back(prog->consts[(*(ip++))]);
@@ -280,6 +314,28 @@ bool VM::run(){
                 stk.push_back((*list)[index]);
                 break;
             }
+            case OP_GET_IND_LOCAL:
+            case OP_GET_IND_LOCAL_OFFSET: {
+                const uint8_t list_local = *(ip++);
+                const uint8_t index_local = *(ip++);
+                int index_offset = 0;
+                if (*(ip-3) == OP_GET_IND_LOCAL_OFFSET){
+                    index_offset = static_cast<int8_t>(*(ip++));
+                }
+                const size_t frame = frames.back().stack_start;
+                const Value& list_value = stk[frame+list_local];
+                const Value& index_value = stk[frame+index_local];
+                if (!list_value.is_list() || !index_value.is_int()){
+                    throw_error("Invalid operation");
+                }
+                const int index = index_value.get_int()+index_offset;
+                vector<Value>* const list = list_value.get_list();
+                if (index < 0 || static_cast<size_t>(index) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                stk.push_back((*list)[index]);
+                break;
+            }
             case OP_SET_IND: { // the value to be set to is at the bottom of the stack
                 Value vval = pop(), vnum = pop(), vlist = pop(); // temporary variables, will be optimised by the compiler
                 if (!vlist.is_list() || !vnum.is_int()){
@@ -305,6 +361,69 @@ bool VM::run(){
                     throw_error("Index out of bounds");
                 }
                 (*list)[index] = vval;
+                break;
+            }
+            case OP_COPY_IND_LOCAL: {
+                const uint8_t list_local = *(ip++);
+                const uint8_t target_local = *(ip++);
+                const uint8_t source_local = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                Value& list_value = stk[frame+list_local];
+                const Value& target_value = stk[frame+target_local];
+                const Value& source_value = stk[frame+source_local];
+                if (!list_value.is_list() || !target_value.is_int() || !source_value.is_int()){
+                    throw_error("Invalid operation");
+                }
+                vector<Value>* const list = list_value.get_list();
+                const int source = source_value.get_int();
+                if (source < 0 || static_cast<size_t>(source) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                const Value copied = (*list)[source];
+                const int target = target_value.get_int();
+                if (target < 0 || static_cast<size_t>(target) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                (*list)[target] = copied;
+                break;
+            }
+            case OP_SET_IND_LOCAL_VALUE: {
+                const uint8_t list_local = *(ip++);
+                const uint8_t target_local = *(ip++);
+                const uint8_t value_local = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                Value& list_value = stk[frame+list_local];
+                const Value& target_value = stk[frame+target_local];
+                const Value copied = stk[frame+value_local];
+                if (!list_value.is_list() || !target_value.is_int()){
+                    throw_error("Invalid operation");
+                }
+                vector<Value>* const list = list_value.get_list();
+                const int target = target_value.get_int();
+                if (target < 0 || static_cast<size_t>(target) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                (*list)[target] = copied;
+                break;
+            }
+            case OP_CMP_LOCAL_LOCAL: {
+                const uint8_t left_local = *(ip++);
+                const uint8_t right_local = *(ip++);
+                const uint8_t operation = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                const Value& a = stk[frame+left_local];
+                const Value& b = stk[frame+right_local];
+                bool result;
+                switch (operation){
+                    case OP_EQ: result = a == b; break;
+                    case OP_NE: result = !(a == b); break;
+                    case OP_GRTR: result = a > b; break;
+                    case OP_GE: result = !(a < b); break;
+                    case OP_LESS: result = a < b; break;
+                    case OP_LE: result = !(a > b); break;
+                    default: result = false; break;
+                }
+                stk.push_back(Value(result));
                 break;
             }
             case OP_JMP_F: // note: this does not actually use the c++ if statement - it can be implemented without

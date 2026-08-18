@@ -13,6 +13,76 @@ Compiler::Compiler(){
     local_counts.push_back(0);
 }
 
+bool Compiler::local_operand(Ast* expression, uint8_t& index) const{
+    if (expression->type != ID || global_index.find(expression->id) != global_index.end()){
+        return false;
+    }
+    auto found = local_index.find(expression->id);
+    if (found == local_index.end()){
+        return false;
+    }
+    index = static_cast<uint8_t>(found->second);
+    return true;
+}
+
+bool Compiler::small_integer(Ast* expression, int8_t& value) const{
+    if (expression->type != INT || expression->num < INT8_MIN || expression->num > INT8_MAX){
+        return false;
+    }
+    value = static_cast<int8_t>(expression->num);
+    return true;
+}
+
+bool Compiler::try_superinstruction(Ast* expression){
+    if (expression->type == SET && expression->ch[0]->type == ID){
+        uint8_t target;
+        Ast* rhs = expression->ch[1];
+        if (local_operand(expression->ch[0], target) && rhs->type == ADD){
+            uint8_t source;
+            int8_t amount;
+            if (local_operand(rhs->ch[0], source) && source == target
+                    && small_integer(rhs->ch[1], amount)){
+                prog.push_byte(OP_INC_LOCAL);
+                prog.push_byte(target);
+                prog.push_byte(static_cast<uint8_t>(amount));
+                return true;
+            }
+        }
+    }
+
+    if (expression->type != SET || expression->ch[0]->type != IND){
+        return false;
+    }
+    Ast* target = expression->ch[0];
+    uint8_t list_index, target_index;
+    if (!local_operand(target->ch[0], list_index) || !local_operand(target->ch[1], target_index)){
+        return false;
+    }
+
+    Ast* rhs = expression->ch[1];
+    if (rhs->type == IND){
+        uint8_t source_list, source_index;
+        if (local_operand(rhs->ch[0], source_list) && source_list == list_index
+                && local_operand(rhs->ch[1], source_index)){
+            prog.push_byte(OP_COPY_IND_LOCAL);
+            prog.push_byte(list_index);
+            prog.push_byte(target_index);
+            prog.push_byte(source_index);
+            return true;
+        }
+    }
+
+    uint8_t value_index;
+    if (local_operand(rhs, value_index)){
+        prog.push_byte(OP_SET_IND_LOCAL_VALUE);
+        prog.push_byte(list_index);
+        prog.push_byte(target_index);
+        prog.push_byte(value_index);
+        return true;
+    }
+    return false;
+}
+
 bool Compiler::has_return(Ast* exp) const{
     if (exp->type == RET){
         return true;
@@ -209,10 +279,20 @@ void Compiler::get_var(string name){ // Get a local variable
 void Compiler::compile(Ast* exp){  
     switch(exp->type){ // Loop over types of tree node
         case ADD: // Basic operations (recursively compile tree nodes then add the operand)
+            {
+            uint8_t local;
+            int8_t immediate;
+            if (local_operand(exp->ch[0], local) && small_integer(exp->ch[1], immediate)){
+                prog.push_byte(OP_ADD_LOCAL_IMM);
+                prog.push_byte(local);
+                prog.push_byte(static_cast<uint8_t>(immediate));
+                break;
+            }
             compile(exp->ch[0]);
             compile(exp->ch[1]);
             prog.push_byte(OP_ADD);
             break;
+            }
         case SUB:
             compile(exp->ch[0]);
             compile(exp->ch[1]);
@@ -233,20 +313,44 @@ void Compiler::compile(Ast* exp){
             prog.push_byte(OP_NEG);
             break;
         case EQ:
+            {
+            uint8_t left, right;
+            if (local_operand(exp->ch[0], left) && local_operand(exp->ch[1], right)){
+                prog.push_byte(OP_CMP_LOCAL_LOCAL);
+                prog.push_byte(left); prog.push_byte(right); prog.push_byte(OP_EQ);
+                break;
+            }
             compile(exp->ch[0]);
             compile(exp->ch[1]);
             prog.push_byte(OP_EQ);
             break;
+            }
         case GT:
+            {
+            uint8_t left, right;
+            if (local_operand(exp->ch[0], left) && local_operand(exp->ch[1], right)){
+                prog.push_byte(OP_CMP_LOCAL_LOCAL);
+                prog.push_byte(left); prog.push_byte(right); prog.push_byte(OP_GRTR);
+                break;
+            }
             compile(exp->ch[0]);
             compile(exp->ch[1]);
             prog.push_byte(OP_GRTR);
             break;
+            }
         case LT:
+            {
+            uint8_t left, right;
+            if (local_operand(exp->ch[0], left) && local_operand(exp->ch[1], right)){
+                prog.push_byte(OP_CMP_LOCAL_LOCAL);
+                prog.push_byte(left); prog.push_byte(right); prog.push_byte(OP_LESS);
+                break;
+            }
             compile(exp->ch[0]);
             compile(exp->ch[1]);
             prog.push_byte(OP_LESS);
             break;
+            }
         case GE:
             compile(exp->ch[0]);
             compile(exp->ch[1]);
@@ -292,9 +396,17 @@ void Compiler::compile(Ast* exp){
             }
             break;
         case ABS:
+            {
+            uint8_t local;
+            if (local_operand(exp->ch[0], local)){
+                prog.push_byte(OP_ABS_LOCAL);
+                prog.push_byte(local);
+                break;
+            }
             compile(exp->ch[0]);
             prog.push_byte(OP_ABS);
             break;
+            }
         case SEQ:
             for(auto c: exp->ch){
                 compile(c);
@@ -333,6 +445,9 @@ void Compiler::compile(Ast* exp){
             prog.push_byte(exp->ch.size());
             break;
         case EXP:
+            if (try_superinstruction(exp->ch[0])){
+                break;
+            }
             compile(exp->ch[0]);
             // Assignment and append statements can discard their result as part of
             // the operation instead of executing a separate OP_POP.
@@ -386,10 +501,41 @@ void Compiler::compile(Ast* exp){
             break;
 
         case IND: 
+            {
+            uint8_t list_index, element_index;
+            if (local_operand(exp->ch[0], list_index) && local_operand(exp->ch[1], element_index)){
+                prog.push_byte(OP_GET_IND_LOCAL);
+                prog.push_byte(list_index);
+                prog.push_byte(element_index);
+                break;
+            }
+            if (local_operand(exp->ch[0], list_index)
+                    && (exp->ch[1]->type == ADD || exp->ch[1]->type == SUB)){
+                uint8_t base_index;
+                int8_t offset;
+                if (local_operand(exp->ch[1]->ch[0], base_index)
+                        && small_integer(exp->ch[1]->ch[1], offset)){
+                    if (exp->ch[1]->type == SUB){
+                        if (offset == INT8_MIN){
+                            compile(exp->ch[0]);
+                            compile(exp->ch[1]);
+                            prog.push_byte(OP_GET_IND);
+                            break;
+                        }
+                        offset = -offset;
+                    }
+                    prog.push_byte(OP_GET_IND_LOCAL_OFFSET);
+                    prog.push_byte(list_index);
+                    prog.push_byte(base_index);
+                    prog.push_byte(static_cast<uint8_t>(offset));
+                    break;
+                }
+            }
             compile(exp->ch[0]);
             compile(exp->ch[1]);
             prog.push_byte(OP_GET_IND);
             break;
+            }
            
         
         case IF: {

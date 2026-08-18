@@ -85,15 +85,15 @@ void Value::print_self(ostream& os){
     }
 }
 
-bool Value::is_int(){
+bool Value::is_int() const{
     return type == V_INT;
 }
 
-bool Value::is_list(){
+bool Value::is_list() const{
     return type == V_LIST;
 }
 
-bool Value::is_func(){
+bool Value::is_func() const{
     return type == V_FUNC;
 }
 

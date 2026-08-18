@@ -62,6 +62,12 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_ADD:
                 os << "OP_ADD" << endl;
                 break;
+            case OP_ADD_LOCAL_IMM:
+                os << "OP_ADD_LOCAL_IMM " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
+                break;
+            case OP_INC_LOCAL:
+                os << "OP_INC_LOCAL " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
+                break;
             case OP_SUB:
                 os << "OP_SUB" << endl;
                 break;
@@ -94,6 +100,9 @@ void Program::print_self(ostream& os){ // print out the generated program
                 break;
             case OP_ABS:
                 os << "OP_ABS" << endl;
+                break;
+            case OP_ABS_LOCAL:
+                os << "OP_ABS_LOCAL " << (int)code[++i] << endl;
                 break;
             case OP_APP:
                 os << "OP_APP" << endl;
@@ -150,6 +159,25 @@ void Program::print_self(ostream& os){ // print out the generated program
                 break;
             case OP_SET_IND_POP:
                 os << "OP_SET_IND_POP" << endl;
+                break;
+            case OP_GET_IND_LOCAL:
+                os << "OP_GET_IND_LOCAL " << (int)code[++i] << " " << (int)code[++i] << endl;
+                break;
+            case OP_GET_IND_LOCAL_OFFSET:
+                os << "OP_GET_IND_LOCAL_OFFSET " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << endl;
+                break;
+            case OP_COPY_IND_LOCAL:
+                os << "OP_COPY_IND_LOCAL " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)code[++i] << endl;
+                break;
+            case OP_SET_IND_LOCAL_VALUE:
+                os << "OP_SET_IND_LOCAL_VALUE " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)code[++i] << endl;
+                break;
+            case OP_CMP_LOCAL_LOCAL:
+                os << "OP_CMP_LOCAL_LOCAL " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)code[++i] << endl;
                 break;
             case OP_GET_IND:
                 os << "OP_GET_IND" << endl;
