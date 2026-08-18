@@ -65,6 +65,7 @@ int main (int argc, char *argv[])
     
     Compiler comp;
     comp.resolve_globals(exp);
+    comp.discover_inline_functions(exp);
     comp.compile(exp);
     delete exp; // resolve and compile expression
 

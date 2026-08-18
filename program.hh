@@ -18,6 +18,7 @@ enum op_code {
     OP_SET_LOCAL, OP_SET_LOCAL_POP, OP_GET_LOCAL, OP_DEF_LOCAL,
     OP_SET_IND, OP_SET_IND_POP, OP_GET_IND,
     OP_JMP_F, OP_JMP_F_POP, OP_JMP, OP_LOOP,
+    OP_CHECK_GLOBAL, OP_SLIDE,
     OP_RETURN, OP_CALL,
 }; // the bytecode operations
 

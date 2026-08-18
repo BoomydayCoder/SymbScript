@@ -1,5 +1,7 @@
 #include "compiler.hh"
 #include "vm.hh"
+#include <algorithm>
+#include <functional>
 #include <string>
 
 Compiler::Compiler(unordered_map<string, int>& glob_index, unordered_map<string, int> loc_index,
@@ -9,6 +11,118 @@ Compiler::Compiler(unordered_map<string, int>& glob_index, unordered_map<string,
 
 Compiler::Compiler(){
     local_counts.push_back(0);
+}
+
+bool Compiler::has_return(Ast* exp) const{
+    if (exp->type == RET){
+        return true;
+    }
+    for (Ast* child: exp->ch){
+        if (has_return(child)){
+            return true;
+        }
+    }
+    return false;
+}
+
+void Compiler::discover_inline_functions(Ast* exp){
+    unordered_map<string, int> assignments;
+    unordered_map<string, Ast*> candidates;
+
+    function<void(Ast*)> collect_assignments = [&](Ast* node){
+        if (node->type == SET && node->ch[0]->type == ID){
+            const string& name = node->ch[0]->id;
+            if (global_index.find(name) != global_index.end()){
+                ++assignments[name];
+                if (node->ch[1]->type == DEF){
+                    candidates[name] = node->ch[1];
+                }
+            }
+        }
+        for (Ast* child: node->ch){
+            collect_assignments(child);
+        }
+    };
+    collect_assignments(exp);
+
+    for (const auto& candidate: candidates){
+        Ast* definition = candidate.second;
+        Ast* sequence = definition->ch[1]->ch[0];
+        bool simple_returns = true;
+        for (size_t i = 0; i + 1 < sequence->ch.size(); ++i){
+            if (has_return(sequence->ch[i])){
+                simple_returns = false;
+                break;
+            }
+        }
+        if (!sequence->ch.empty() && sequence->ch.back()->type != RET
+                && has_return(sequence->ch.back())){
+            simple_returns = false;
+        }
+        if (assignments[candidate.first] == 1 && simple_returns){
+            inline_functions[candidate.first] = definition;
+        }
+    }
+}
+
+bool Compiler::try_inline_call(Ast* callee, Ast* arguments){
+    if (callee->type != ID){
+        return false;
+    }
+    auto found = inline_functions.find(callee->id);
+    if (found == inline_functions.end()){
+        return false;
+    }
+    Ast* definition = found->second;
+    if (find(inline_stack.begin(), inline_stack.end(), definition) != inline_stack.end()
+            || definition->ch[0]->ch.size() != arguments->ch.size()){
+        return false;
+    }
+
+    for (Ast* argument: arguments->ch){
+        compile(argument);
+    }
+    prog.push_byte(OP_CHECK_GLOBAL);
+    prog.push_byte(global_index[callee->id]);
+
+    const auto saved_local_index = local_index;
+    const size_t saved_name_count = local_names.size();
+    const int outer_local_count = local_counts.back();
+    begin_scope();
+
+    for (Ast* parameter: definition->ch[0]->ch){
+        local_index[parameter->id] = local_counts.back()++;
+        local_names.push_back(parameter->id);
+    }
+
+    inline_stack.push_back(definition);
+    Ast* sequence = definition->ch[1]->ch[0];
+    const bool has_final_return = !sequence->ch.empty() && sequence->ch.back()->type == RET;
+    const size_t statement_count = sequence->ch.size() - (has_final_return ? 1 : 0);
+    for (size_t i = 0; i < statement_count; ++i){
+        compile(sequence->ch[i]);
+    }
+    if (has_final_return){
+        compile(sequence->ch.back()->ch[0]);
+    }
+    else {
+        prog.push_byte(OP_NULL);
+    }
+    inline_stack.pop_back();
+
+    const int locals_to_remove = local_counts.back() - outer_local_count;
+    if (locals_to_remove > UINT8_MAX){
+        cerr << "Too many locals in inlined function" << endl;
+        exit(1);
+    }
+    prog.push_byte(OP_SLIDE);
+    prog.push_byte(locals_to_remove);
+
+    local_counts.pop_back();
+    local_names.resize(saved_name_count);
+    local_index = saved_local_index;
+    scope--;
+    return true;
 }
 void Compiler::resolve_globals(Ast* exp){ // this is needed to allocate global variables (as they can be referenced before they are defined)
     switch(exp->type){
@@ -429,6 +543,9 @@ void Compiler::compile(Ast* exp){
         case DEF: {
             // this creates a function object.
             Compiler comp(global_index, unordered_map<string, int>(), vector<string>(), vector<int>(1,0));
+            comp.inline_functions = inline_functions;
+            comp.inline_stack = inline_stack;
+            comp.inline_stack.push_back(exp);
             
             // no global variables resolved, so all variables will be local by default (unless in the global table of course)
 
@@ -469,6 +586,9 @@ void Compiler::compile(Ast* exp){
             break;
         }
         case CAL: {
+            if (try_inline_call(exp->ch[0], exp->ch[1])){
+                break;
+            }
             // compile all the parameters, then the function name itself
             for(auto c: exp->ch[1]->ch){
                 compile(c);

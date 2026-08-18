@@ -18,6 +18,7 @@ class Compiler { // A class that represents the compiler as it compiles the code
         Program prog; // Stores bytecode instructions
 
         void resolve_globals(Ast* exp); // Since global variables are late bound, they need to be resolved before compilation
+        void discover_inline_functions(Ast* exp);
 
         void compile(Ast* exp); // Turns the code into bytecode
 
@@ -36,5 +37,12 @@ class Compiler { // A class that represents the compiler as it compiles the code
 
         int scope = 0; // The current scope level
         int range_for_ct = 0; // a strange variable needed to assign looping variables for range based for loops
+
+        unordered_map<string, Ast*> inline_functions;
+        vector<Ast*> inline_stack;
+
+    private:
+        bool try_inline_call(Ast* callee, Ast* arguments);
+        bool has_return(Ast* exp) const;
 };
 #endif

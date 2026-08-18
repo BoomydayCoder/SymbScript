@@ -130,6 +130,9 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_GET_GLOBAL:
                 os << "OP_GET_GLOBAL " << (int)code[++i] << endl;
                 break;
+            case OP_CHECK_GLOBAL:
+                os << "OP_CHECK_GLOBAL " << (int)code[++i] << endl;
+                break;
             case OP_SET_LOCAL:
                 os << "OP_SET_LOCAL " << (int)code[++i] << endl;
                 break;
@@ -162,6 +165,9 @@ void Program::print_self(ostream& os){ // print out the generated program
                 break;
             case OP_LOOP:
                 os << "OP_LOOP " << (int)code[++i]*(1<<8) + (int)code[++i] - 3 << endl; 
+                break;
+            case OP_SLIDE:
+                os << "OP_SLIDE " << (int)code[++i] << endl;
                 break;
             case OP_RETURN:
                 os << "OP_RETURN" << endl;

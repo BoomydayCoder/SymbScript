@@ -244,6 +244,13 @@ bool VM::run(){
                 stk.push_back(globals[index]);
                 break;
             }
+            case OP_CHECK_GLOBAL: {
+                const uint8_t index = *(ip++);
+                if (!global_defined[index]){
+                    throw_error("Undefined global");
+                }
+                break;
+            }
 
             case OP_SET_LOCAL:
                 stk[(*(ip++))+frames.back().stack_start] = peek(0);
@@ -323,6 +330,13 @@ bool VM::run(){
             case OP_LOOP:
                 ip -= read_short(); 
                 break;
+            case OP_SLIDE: {
+                const uint8_t count = *(ip++);
+                const Value result = pop();
+                stk.resize(stk.size()-count);
+                stk.push_back(result);
+                break;
+            }
             case OP_CALL: {
                 if (!peek(0).is_func()){
                     throw_error("Operand must be a function");
