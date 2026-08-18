@@ -37,7 +37,7 @@ class Value {
         Value ();
         Value (int v);
         Value (bool v); // constructors
-        Value (vector<Value> v);
+        Value (vector<Value>&& v);
         Value (Program p);
 
         ValueType type; // the type of the value

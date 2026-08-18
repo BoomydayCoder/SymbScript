@@ -2,6 +2,7 @@
 #include "vm.hh"
 
 #include <iostream>
+#include <utility>
 using namespace std;
 
 
@@ -42,8 +43,8 @@ Value::Value(Program p): type(V_FUNC){
     vm.progs.push_back(val.p);
 }
 
-Value::Value(vector<Value> v): type(V_LIST){
-    val.l = new vector<Value>(v);
+Value::Value(vector<Value>&& v): type(V_LIST){
+    val.l = new vector<Value>(std::move(v));
     vm.lists.push_back(val.l);
 }
 
@@ -141,4 +142,4 @@ Value::operator bool() const{
             return 1; // functions are always true
     }
     return false;
-} 
+}

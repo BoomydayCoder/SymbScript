@@ -167,12 +167,11 @@ bool VM::run(){
                 break;
             case OP_LIST :{
                 int n = (*(ip++));
-                vector<Value> l;
-                for(int i=0;i<n;++i){
-                    l.push_back(pop());
+                vector<Value> l(n);
+                for(int i=n-1;i>=0;--i){
+                    l[i] = pop();
                 }
-                reverse(l.begin(), l.end()); // this is needed as the list is built in reverse order
-                stk.push_back(Value(l));
+                stk.push_back(Value(std::move(l)));
                 break;
             }
 
