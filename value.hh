@@ -3,6 +3,7 @@
 
 #include "program.hh"
 
+#include <cstdint>
 #include <variant>
 #include <iostream>
 #include <vector>
@@ -28,6 +29,15 @@ enum ValueType {
 
 
 class Value {
+    private:
+        static constexpr uintptr_t TAG_MASK = 0x3;
+        static constexpr uintptr_t TAG_INT = 0x0;
+        static constexpr uintptr_t TAG_LIST = 0x1;
+        static constexpr uintptr_t TAG_FUNC = 0x2;
+
+        uintptr_t bits = TAG_INT;
+        ValueType get_type() const;
+
     public:
         
 
@@ -40,19 +50,6 @@ class Value {
         Value (vector<Value>&& v);
         Value (Program p);
 
-        ValueType type; // the type of the value
-        //variant<int, vector<Value>*> val; // the value of the variable - we have switched to union for better performance
-        union {
-            int i;
-            vector<Value>* l;
-            Program* p;
-        } val;
-        
-        
-        
-        
-
-
         bool is_int() const;
         bool is_list() const;
         bool is_func() const;
@@ -60,6 +57,7 @@ class Value {
         int get_int() const;
         vector<Value>* get_list() const;
         Program* get_func() const;
+        void add_to_int(int amount);
 
 
         void print_self(ostream& os);

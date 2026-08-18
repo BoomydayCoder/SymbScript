@@ -5,6 +5,8 @@
 #include <utility>
 using namespace std;
 
+static_assert(sizeof(Value) == sizeof(uintptr_t), "Value must remain one machine word");
+
 
 /*
 
@@ -23,46 +25,59 @@ Value::vector<Value>* Value::get_list() const{
     return get<vector<Value>*>(val);
 }*/ // using variants, deprecated
 
-Value::Value(int v): type(V_INT){
-    val.i = v;
+Value::Value(int v){
+    bits = static_cast<uintptr_t>(static_cast<uint32_t>(v)) << 2;
 }
 
-Value::Value(bool v): type(V_INT){
-    val.i = v?1:0;
-}
-
-
-Value::Value(): type(V_INT){
-    val.i = 0;
+Value::Value(bool v): Value(static_cast<int>(v)){
 }
 
 
-
-Value::Value(Program p): type(V_FUNC){
-    val.p = new Program(p);
-    vm.progs.push_back(val.p);
+Value::Value(){
+    bits = TAG_INT;
 }
 
-Value::Value(vector<Value>&& v): type(V_LIST){
-    val.l = vm.allocate_list(std::move(v));
+
+
+Value::Value(Program p){
+    Program* program = new Program(p);
+    vm.progs.push_back(program);
+    bits = reinterpret_cast<uintptr_t>(program) | TAG_FUNC;
+}
+
+Value::Value(vector<Value>&& v){
+    vector<Value>* list = vm.allocate_list(std::move(v));
+    bits = reinterpret_cast<uintptr_t>(list) | TAG_LIST;
 }
 
 int Value::get_int() const{
-    return val.i;
+    return static_cast<int32_t>(bits >> 2);
 }
 
 vector<Value>* Value::get_list() const{
-    return val.l;
+    return reinterpret_cast<vector<Value>*>(bits & ~TAG_MASK);
 }
 
 Program* Value::get_func() const{
-    return val.p;
+    return reinterpret_cast<Program*>(bits & ~TAG_MASK);
+}
+
+void Value::add_to_int(int amount){
+    *this = Value(get_int()+amount);
+}
+
+ValueType Value::get_type() const{
+    switch (bits & TAG_MASK){
+        case TAG_LIST: return V_LIST;
+        case TAG_FUNC: return V_FUNC;
+        default: return V_INT;
+    }
 }
 
 
 
 void Value::print_self(ostream& os){
-    switch (type){
+    switch (get_type()){
         case V_INT:
             os << get_int();
             break;
@@ -86,19 +101,20 @@ void Value::print_self(ostream& os){
 }
 
 bool Value::is_int() const{
-    return type == V_INT;
+    return (bits & TAG_MASK) == TAG_INT;
 }
 
 bool Value::is_list() const{
-    return type == V_LIST;
+    return (bits & TAG_MASK) == TAG_LIST;
 }
 
 bool Value::is_func() const{
-    return type == V_FUNC;
+    return (bits & TAG_MASK) == TAG_FUNC;
 }
 
 bool Value::operator==(const Value& v) const{
-    if (type != v.type){
+    const ValueType type = get_type();
+    if (type != v.get_type()){
         return false; // if different types, return false
     }
     switch(type){
@@ -114,11 +130,11 @@ bool Value::operator==(const Value& v) const{
 
 bool Value::operator<(const Value& v) const{
     // if both numbers
-    if (type == V_INT && v.type == V_INT){
+    if (is_int() && v.is_int()){
         return get_int() < v.get_int();
     }
     // if both lists
-    if (type == V_LIST && v.type == V_LIST){
+    if (is_list() && v.is_list()){
         return *get_list() < *v.get_list();
     }
     // return error
@@ -132,7 +148,7 @@ bool Value::operator>(const Value& v) const{
 }
 
 Value::operator bool() const{
-    switch(type){
+    switch(get_type()){
         case V_INT:
             return get_int() != 0; // if the value is not 0, return true
         case V_LIST:

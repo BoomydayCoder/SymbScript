@@ -216,7 +216,7 @@ dispatch_switch:
                 if (!value.is_int()){
                     throw_error("Operands must be integers");
                 }
-                value.val.i += amount;
+                value.add_to_int(amount);
                 break;
             }
             case OP_SUB:
@@ -698,7 +698,7 @@ dispatch_inc_local: {
         if (!value.is_int()){
             throw_error("Operands must be integers");
         }
-        value.val.i += amount;
+        value.add_to_int(amount);
         continue;
     }
 
