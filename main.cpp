@@ -75,7 +75,7 @@ int main (int argc, char *argv[])
     
     
     
-    vm.init_program(comp.prog);
+    vm.init_program(comp.prog, comp.global_index.size());
     
     
     vm.trace_execution = trace_execution;

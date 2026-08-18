@@ -5,7 +5,6 @@
 #include "value.hh"
 #include <vector>
 #include <iostream>
-#include <unordered_map>
 using namespace std;
 
 
@@ -28,7 +27,8 @@ class VM {
         vector<vector<uint8_t>::iterator> ips; // the instruction pointer
 
         vector<Value> stk; // the value stack
-        unordered_map<int, Value> globals; // this is an unordered map to prevent redeclarations
+        vector<Value> globals; // globals are compiled to direct byte-sized indices
+        vector<uint8_t> global_defined; // preserves late-bound undefined-global errors
 
         vector<vector<Value>*> lists; // we need to keep track of all the lists to delete them later
         vector<Program*> progs; // we need to keep track of all the functions to delete them later
@@ -42,7 +42,7 @@ class VM {
 
         void throw_error(string msg);
 
-        void init_program(Program& p);        
+        void init_program(Program& p, size_t global_count);
 };
 
 extern VM vm; // make a global instance of the VM

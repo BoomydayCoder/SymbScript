@@ -23,16 +23,13 @@ VM vm;
 } while (false) // macro to handle binary operations
 
 VM::VM(){
-    
-
-
-    globals.reserve(UINT8_MAX+1);
     stk.reserve(UINT8_MAX+1);
-    
 }
 
-void VM::init_program(Program& p){
+void VM::init_program(Program& p, size_t global_count){
     prog = &p;
+    globals.assign(global_count, Value());
+    global_defined.assign(global_count, 0);
     
     
     ip = prog->code.begin();
@@ -191,15 +188,20 @@ bool VM::run(){
                 stk.pop_back();
                 break;
 
-            case OP_SET_GLOBAL:
-                globals[(*(ip++))] = peek(0);
+            case OP_SET_GLOBAL: {
+                const uint8_t index = *(ip++);
+                globals[index] = peek(0);
+                global_defined[index] = 1;
                 break;
-            case OP_GET_GLOBAL:
-                if (globals.find(*ip) == globals.end()){ // this is needed as globals are late bound
+            }
+            case OP_GET_GLOBAL: {
+                const uint8_t index = *(ip++);
+                if (!global_defined[index]){ // globals remain late bound
                     throw_error("Undefined global");
-                } // maybe remove this to speed up language, need to do profiling
-                stk.push_back(globals[(*(ip++))]);
+                }
+                stk.push_back(globals[index]);
                 break;
+            }
 
             case OP_SET_LOCAL:
                 stk[(*(ip++))+frames.back()] = peek(0);
