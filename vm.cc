@@ -260,14 +260,16 @@ bool VM::run(){
                 stk.push_back(peek(0));
                 break;
             case OP_GET_IND: {
-                Value vnum = pop(), vlist = pop(); // temporary variables, will be optimised by the compiler
+                Value vnum = pop(), vlist = pop();
                 if (!vlist.is_list() || !vnum.is_int()){
                     throw_error("Invalid operation");
                 }
-                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                const int index = vnum.get_int();
+                vector<Value>* const list = vlist.get_list();
+                if (index < 0 || static_cast<size_t>(index) >= list->size()){
                     throw_error("Index out of bounds");
                 }
-                stk.push_back(vlist.get_list()->at(vnum.get_int()));
+                stk.push_back((*list)[index]);
                 break;
             }
             case OP_SET_IND: { // the value to be set to is at the bottom of the stack
@@ -275,10 +277,12 @@ bool VM::run(){
                 if (!vlist.is_list() || !vnum.is_int()){
                     throw_error("Invalid operation");
                 }
-                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                const int index = vnum.get_int();
+                vector<Value>* const list = vlist.get_list();
+                if (index < 0 || static_cast<size_t>(index) >= list->size()){
                     throw_error("Index out of bounds");
                 }
-                vlist.get_list()->at(vnum.get_int()) = vval;
+                (*list)[index] = vval;
                 stk.push_back(vval); // This could be a cause of slowness - check if it's a great performance loss
                 break;
             }
@@ -287,10 +291,12 @@ bool VM::run(){
                 if (!vlist.is_list() || !vnum.is_int()){
                     throw_error("Invalid operation");
                 }
-                if (vnum.get_int() >= vlist.get_list()->size() || vnum.get_int() < 0){
+                const int index = vnum.get_int();
+                vector<Value>* const list = vlist.get_list();
+                if (index < 0 || static_cast<size_t>(index) >= list->size()){
                     throw_error("Index out of bounds");
                 }
-                vlist.get_list()->at(vnum.get_int()) = vval;
+                (*list)[index] = vval;
                 break;
             }
             case OP_JMP_F: // note: this does not actually use the c++ if statement - it can be implemented without
