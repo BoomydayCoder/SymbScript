@@ -97,8 +97,14 @@ void Program::print_self(ostream& os){ // print out the generated program
             case OP_ADD_LOCAL_IMM:
                 os << "OP_ADD_LOCAL_IMM " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
                 break;
+            case OP_ADD_LOCAL_IMM_INT:
+                os << "OP_ADD_LOCAL_IMM_INT " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
+                break;
             case OP_INC_LOCAL:
                 os << "OP_INC_LOCAL " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
+                break;
+            case OP_INC_LOCAL_INT:
+                os << "OP_INC_LOCAL_INT " << (int)code[++i] << " " << (int)(int8_t)code[++i] << endl;
                 break;
             case OP_SUB:
                 os << "OP_SUB" << endl;
@@ -199,6 +205,13 @@ void Program::print_self(ostream& os){ // print out the generated program
                 os << "OP_GET_IND_LOCAL_OFFSET " << (int)code[++i] << " " << (int)code[++i]
                    << " " << (int)(int8_t)code[++i] << endl;
                 break;
+            case OP_GET_IND_LOCAL_INT:
+                os << "OP_GET_IND_LOCAL_INT " << (int)code[++i] << " " << (int)code[++i] << endl;
+                break;
+            case OP_GET_IND_LOCAL_OFFSET_INT:
+                os << "OP_GET_IND_LOCAL_OFFSET_INT " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << endl;
+                break;
             case OP_COPY_IND_LOCAL:
                 os << "OP_COPY_IND_LOCAL " << (int)code[++i] << " " << (int)code[++i]
                    << " " << (int)code[++i] << endl;
@@ -227,6 +240,17 @@ void Program::print_self(ostream& os){ // print out the generated program
                 break;
             case OP_JMP_FALSE_IND_CMP:
                 os << "OP_JMP_FALSE_IND_CMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 9
+                   << " " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << " " << (int)code[++i]
+                   << " " << (int)(int8_t)code[++i] << " " << (int)code[++i] << endl;
+                break;
+            case OP_JMP_FALSE_LOCAL_INT_CMP:
+                os << "OP_JMP_FALSE_LOCAL_INT_CMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 6
+                   << " " << (int)code[++i] << " " << (int)code[++i]
+                   << " " << (int)code[++i] << endl;
+                break;
+            case OP_JMP_FALSE_IND_INT_CMP:
+                os << "OP_JMP_FALSE_IND_INT_CMP " << (int)code[++i]*(1<<8) + (int)code[++i] + 9
                    << " " << (int)code[++i] << " " << (int)code[++i]
                    << " " << (int)(int8_t)code[++i] << " " << (int)code[++i]
                    << " " << (int)(int8_t)code[++i] << " " << (int)code[++i] << endl;

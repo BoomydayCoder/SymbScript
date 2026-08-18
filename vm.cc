@@ -34,6 +34,18 @@ static inline bool compare_values(const Value& a, const Value& b, uint8_t operat
     }
 }
 
+static inline bool compare_ints(int a, int b, uint8_t operation){
+    switch (operation){
+        case OP_EQ: return a == b;
+        case OP_NE: return a != b;
+        case OP_GRTR: return a > b;
+        case OP_GE: return a >= b;
+        case OP_LESS: return a < b;
+        case OP_LE: return a <= b;
+        default: return false;
+    }
+}
+
 VM::VM(){
     stk.reserve(UINT8_MAX+1);
 }
@@ -200,6 +212,9 @@ bool VM::run(){
             &&dispatch_get_ind_local, &&dispatch_get_ind_local_offset,
             &&dispatch_copy_ind_local, &&dispatch_set_ind_local_value,
             &&dispatch_jump_false_local_cmp, &&dispatch_jump_false_ind_cmp,
+            &&dispatch_add_local_imm_int, &&dispatch_inc_local_int,
+            &&dispatch_get_ind_local_int, &&dispatch_get_ind_local_offset_int,
+            &&dispatch_jump_false_local_int_cmp, &&dispatch_jump_false_ind_int_cmp,
             &&dispatch_switch, &&dispatch_switch,
         };
         goto *dispatch_table[opcode];
@@ -219,6 +234,20 @@ dispatch_switch:
                 if (!value.is_int()){
                     throw_error("Operands must be integers");
                 }
+                *(ip-3) = OP_ADD_LOCAL_IMM_INT;
+                stk.push_back(Value(value.get_int()+amount));
+                break;
+            }
+            case OP_ADD_LOCAL_IMM_INT: {
+                const auto instruction = ip-1;
+                const uint8_t index = *(ip++);
+                const int amount = static_cast<int8_t>(*(ip++));
+                const Value& value = stk[frames.back().stack_start+index];
+                if (!value.is_int()){
+                    *instruction = OP_ADD_LOCAL_IMM;
+                    ip = instruction;
+                    break;
+                }
                 stk.push_back(Value(value.get_int()+amount));
                 break;
             }
@@ -228,6 +257,20 @@ dispatch_switch:
                 Value& value = stk[frames.back().stack_start+index];
                 if (!value.is_int()){
                     throw_error("Operands must be integers");
+                }
+                *(ip-3) = OP_INC_LOCAL_INT;
+                value.add_to_int(amount);
+                break;
+            }
+            case OP_INC_LOCAL_INT: {
+                const auto instruction = ip-1;
+                const uint8_t index = *(ip++);
+                const int amount = static_cast<int8_t>(*(ip++));
+                Value& value = stk[frames.back().stack_start+index];
+                if (!value.is_int()){
+                    *instruction = OP_INC_LOCAL;
+                    ip = instruction;
+                    break;
                 }
                 value.add_to_int(amount);
                 break;
@@ -439,7 +482,8 @@ dispatch_switch:
                 const uint8_t list_local = *(ip++);
                 const uint8_t index_local = *(ip++);
                 int index_offset = 0;
-                if (*(ip-3) == OP_GET_IND_LOCAL_OFFSET){
+                const bool has_offset = *(ip-3) == OP_GET_IND_LOCAL_OFFSET;
+                if (has_offset){
                     index_offset = static_cast<int8_t>(*(ip++));
                 }
                 const size_t frame = frames.back().stack_start;
@@ -447,6 +491,31 @@ dispatch_switch:
                 const Value& index_value = stk[frame+index_local];
                 if (!list_value.is_list() || !index_value.is_int()){
                     throw_error("Invalid operation");
+                }
+                const int index = index_value.get_int()+index_offset;
+                vector<Value>* const list = list_value.get_list();
+                if (index < 0 || static_cast<size_t>(index) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                *(ip-(has_offset ? 4 : 3)) = has_offset
+                    ? OP_GET_IND_LOCAL_OFFSET_INT : OP_GET_IND_LOCAL_INT;
+                stk.push_back((*list)[index]);
+                break;
+            }
+            case OP_GET_IND_LOCAL_INT:
+            case OP_GET_IND_LOCAL_OFFSET_INT: {
+                const auto instruction = ip-1;
+                const bool has_offset = *(ip-1) == OP_GET_IND_LOCAL_OFFSET_INT;
+                const uint8_t list_local = *(ip++);
+                const uint8_t index_local = *(ip++);
+                const int index_offset = has_offset ? static_cast<int8_t>(*(ip++)) : 0;
+                const size_t frame = frames.back().stack_start;
+                const Value& list_value = stk[frame+list_local];
+                const Value& index_value = stk[frame+index_local];
+                if (!list_value.is_list() || !index_value.is_int()){
+                    *instruction = has_offset ? OP_GET_IND_LOCAL_OFFSET : OP_GET_IND_LOCAL;
+                    ip = instruction;
+                    break;
                 }
                 const int index = index_value.get_int()+index_offset;
                 vector<Value>* const list = list_value.get_list();
@@ -552,7 +621,36 @@ dispatch_switch:
                 const uint8_t right_local = *(ip++);
                 const uint8_t operation = *(ip++);
                 const size_t frame = frames.back().stack_start;
-                if (!compare_values(stk[frame+left_local], stk[frame+right_local], operation)){
+                const Value& left = stk[frame+left_local];
+                const Value& right = stk[frame+right_local];
+                bool condition;
+                if (left.is_int() && right.is_int()){
+                    *(ip-6) = OP_JMP_FALSE_LOCAL_INT_CMP;
+                    condition = compare_ints(left.get_int(), right.get_int(), operation);
+                }
+                else {
+                    condition = compare_values(left, right, operation);
+                }
+                if (!condition){
+                    ip += offset;
+                }
+                break;
+            }
+            case OP_JMP_FALSE_LOCAL_INT_CMP: {
+                const auto instruction = ip-1;
+                const uint16_t offset = read_short();
+                const uint8_t left_local = *(ip++);
+                const uint8_t right_local = *(ip++);
+                const uint8_t operation = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                const Value& left = stk[frame+left_local];
+                const Value& right = stk[frame+right_local];
+                if (!left.is_int() || !right.is_int()){
+                    *instruction = OP_JMP_FALSE_LOCAL_CMP;
+                    ip = instruction;
+                    break;
+                }
+                if (!compare_ints(left.get_int(), right.get_int(), operation)){
                     ip += offset;
                 }
                 break;
@@ -582,7 +680,55 @@ dispatch_switch:
                 if (right < 0 || static_cast<size_t>(right) >= list->size()){
                     throw_error("Index out of bounds");
                 }
-                if (!compare_values(left_element, (*list)[right], operation)){
+                const Value right_element = (*list)[right];
+                bool condition;
+                if (left_element.is_int() && right_element.is_int()){
+                    *(ip-9) = OP_JMP_FALSE_IND_INT_CMP;
+                    condition = compare_ints(left_element.get_int(), right_element.get_int(), operation);
+                }
+                else {
+                    condition = compare_values(left_element, right_element, operation);
+                }
+                if (!condition){
+                    ip += offset;
+                }
+                break;
+            }
+            case OP_JMP_FALSE_IND_INT_CMP: {
+                const auto instruction = ip-1;
+                const uint16_t offset = read_short();
+                const uint8_t list_local = *(ip++);
+                const uint8_t left_local = *(ip++);
+                const int left_offset = static_cast<int8_t>(*(ip++));
+                const uint8_t right_local = *(ip++);
+                const int right_offset = static_cast<int8_t>(*(ip++));
+                const uint8_t operation = *(ip++);
+                const size_t frame = frames.back().stack_start;
+                const Value& list_value = stk[frame+list_local];
+                const Value& left_value = stk[frame+left_local];
+                const Value& right_value = stk[frame+right_local];
+                if (!list_value.is_list() || !left_value.is_int() || !right_value.is_int()){
+                    *instruction = OP_JMP_FALSE_IND_CMP;
+                    ip = instruction;
+                    break;
+                }
+                vector<Value>* const list = list_value.get_list();
+                const int left = left_value.get_int()+left_offset;
+                if (left < 0 || static_cast<size_t>(left) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                const int right = right_value.get_int()+right_offset;
+                if (right < 0 || static_cast<size_t>(right) >= list->size()){
+                    throw_error("Index out of bounds");
+                }
+                const Value& left_element = (*list)[left];
+                const Value& right_element = (*list)[right];
+                if (!left_element.is_int() || !right_element.is_int()){
+                    *instruction = OP_JMP_FALSE_IND_CMP;
+                    ip = instruction;
+                    break;
+                }
+                if (!compare_ints(left_element.get_int(), right_element.get_int(), operation)){
                     ip += offset;
                 }
                 break;
@@ -741,6 +887,21 @@ dispatch_add_local_imm: {
         if (!value.is_int()){
             throw_error("Operands must be integers");
         }
+        *(ip-3) = OP_ADD_LOCAL_IMM_INT;
+        stk.push_back(Value(value.get_int()+amount));
+        continue;
+    }
+
+dispatch_add_local_imm_int: {
+        const auto instruction = ip-1;
+        const uint8_t index = *(ip++);
+        const int amount = static_cast<int8_t>(*(ip++));
+        const Value& value = stk[frames.back().stack_start+index];
+        if (!value.is_int()){
+            *instruction = OP_ADD_LOCAL_IMM;
+            ip = instruction;
+            continue;
+        }
         stk.push_back(Value(value.get_int()+amount));
         continue;
     }
@@ -751,6 +912,21 @@ dispatch_inc_local: {
         Value& value = stk[frames.back().stack_start+index];
         if (!value.is_int()){
             throw_error("Operands must be integers");
+        }
+        *(ip-3) = OP_INC_LOCAL_INT;
+        value.add_to_int(amount);
+        continue;
+    }
+
+dispatch_inc_local_int: {
+        const auto instruction = ip-1;
+        const uint8_t index = *(ip++);
+        const int amount = static_cast<int8_t>(*(ip++));
+        Value& value = stk[frames.back().stack_start+index];
+        if (!value.is_int()){
+            *instruction = OP_INC_LOCAL;
+            ip = instruction;
+            continue;
         }
         value.add_to_int(amount);
         continue;
@@ -803,6 +979,32 @@ dispatch_get_ind_local_offset: {
         const Value& index_value = stk[frame+index_local];
         if (!list_value.is_list() || !index_value.is_int()){
             throw_error("Invalid operation");
+        }
+        const int index = index_value.get_int()+offset;
+        vector<Value>* const list = list_value.get_list();
+        if (index < 0 || static_cast<size_t>(index) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        *(ip-(has_offset ? 4 : 3)) = has_offset
+            ? OP_GET_IND_LOCAL_OFFSET_INT : OP_GET_IND_LOCAL_INT;
+        stk.push_back((*list)[index]);
+        continue;
+    }
+
+dispatch_get_ind_local_int:
+dispatch_get_ind_local_offset_int: {
+        const auto instruction = ip-1;
+        const bool has_offset = opcode == OP_GET_IND_LOCAL_OFFSET_INT;
+        const uint8_t list_local = *(ip++);
+        const uint8_t index_local = *(ip++);
+        const int offset = has_offset ? static_cast<int8_t>(*(ip++)) : 0;
+        const size_t frame = frames.back().stack_start;
+        const Value& list_value = stk[frame+list_local];
+        const Value& index_value = stk[frame+index_local];
+        if (!list_value.is_list() || !index_value.is_int()){
+            *instruction = has_offset ? OP_GET_IND_LOCAL_OFFSET : OP_GET_IND_LOCAL;
+            ip = instruction;
+            continue;
         }
         const int index = index_value.get_int()+offset;
         vector<Value>* const list = list_value.get_list();
@@ -864,7 +1066,37 @@ dispatch_jump_false_local_cmp: {
         const uint8_t right_local = *(ip++);
         const uint8_t operation = *(ip++);
         const size_t frame = frames.back().stack_start;
-        if (!compare_values(stk[frame+left_local], stk[frame+right_local], operation)){
+        const Value& left = stk[frame+left_local];
+        const Value& right = stk[frame+right_local];
+        bool condition;
+        if (left.is_int() && right.is_int()){
+            *(ip-6) = OP_JMP_FALSE_LOCAL_INT_CMP;
+            condition = compare_ints(left.get_int(), right.get_int(), operation);
+        }
+        else {
+            condition = compare_values(left, right, operation);
+        }
+        if (!condition){
+            ip += offset;
+        }
+        continue;
+    }
+
+dispatch_jump_false_local_int_cmp: {
+        const auto instruction = ip-1;
+        const uint16_t offset = read_short();
+        const uint8_t left_local = *(ip++);
+        const uint8_t right_local = *(ip++);
+        const uint8_t operation = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        const Value& left = stk[frame+left_local];
+        const Value& right = stk[frame+right_local];
+        if (!left.is_int() || !right.is_int()){
+            *instruction = OP_JMP_FALSE_LOCAL_CMP;
+            ip = instruction;
+            continue;
+        }
+        if (!compare_ints(left.get_int(), right.get_int(), operation)){
             ip += offset;
         }
         continue;
@@ -895,7 +1127,56 @@ dispatch_jump_false_ind_cmp: {
         if (right < 0 || static_cast<size_t>(right) >= list->size()){
             throw_error("Index out of bounds");
         }
-        if (!compare_values(left_element, (*list)[right], operation)){
+        const Value right_element = (*list)[right];
+        bool condition;
+        if (left_element.is_int() && right_element.is_int()){
+            *(ip-9) = OP_JMP_FALSE_IND_INT_CMP;
+            condition = compare_ints(left_element.get_int(), right_element.get_int(), operation);
+        }
+        else {
+            condition = compare_values(left_element, right_element, operation);
+        }
+        if (!condition){
+            ip += offset;
+        }
+        continue;
+    }
+
+dispatch_jump_false_ind_int_cmp: {
+        const auto instruction = ip-1;
+        const uint16_t offset = read_short();
+        const uint8_t list_local = *(ip++);
+        const uint8_t left_local = *(ip++);
+        const int left_offset = static_cast<int8_t>(*(ip++));
+        const uint8_t right_local = *(ip++);
+        const int right_offset = static_cast<int8_t>(*(ip++));
+        const uint8_t operation = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        const Value& list_value = stk[frame+list_local];
+        const Value& left_value = stk[frame+left_local];
+        const Value& right_value = stk[frame+right_local];
+        if (!list_value.is_list() || !left_value.is_int() || !right_value.is_int()){
+            *instruction = OP_JMP_FALSE_IND_CMP;
+            ip = instruction;
+            continue;
+        }
+        vector<Value>* const list = list_value.get_list();
+        const int left = left_value.get_int()+left_offset;
+        if (left < 0 || static_cast<size_t>(left) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        const int right = right_value.get_int()+right_offset;
+        if (right < 0 || static_cast<size_t>(right) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        const Value& left_element = (*list)[left];
+        const Value& right_element = (*list)[right];
+        if (!left_element.is_int() || !right_element.is_int()){
+            *instruction = OP_JMP_FALSE_IND_CMP;
+            ip = instruction;
+            continue;
+        }
+        if (!compare_ints(left_element.get_int(), right_element.get_int(), operation)){
             ip += offset;
         }
         continue;
