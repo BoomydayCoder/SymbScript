@@ -23,6 +23,7 @@ enum op_code {
     OP_CMP_LOCAL_LOCAL, OP_GET_IND_LOCAL, OP_GET_IND_LOCAL_OFFSET,
     OP_COPY_IND_LOCAL, OP_SET_IND_LOCAL_VALUE,
     OP_RETURN, OP_CALL,
+    OP_COUNT,
 }; // the bytecode operations
 
 class Value;

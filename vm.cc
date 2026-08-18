@@ -85,7 +85,30 @@ bool VM::run(){
     for(;ip<prog->code.end();){
         
         if (trace_execution) print_self(cerr);
-        switch((*(ip++))){
+        const uint8_t opcode = *(ip++);
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(SYMBSCRIPT_PORTABLE_DISPATCH)
+        static const void* const dispatch_table[OP_COUNT] = {
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_switch, &&dispatch_switch,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_switch, &&dispatch_switch,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_switch, &&dispatch_switch,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_app_pop,
+            &&dispatch_const, &&dispatch_null, &&dispatch_switch,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_pop,
+            &&dispatch_switch, &&dispatch_set_global_pop, &&dispatch_get_global,
+            &&dispatch_switch, &&dispatch_set_local_pop, &&dispatch_get_local,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_switch,
+            &&dispatch_switch, &&dispatch_switch, &&dispatch_jump_false_pop,
+            &&dispatch_switch, &&dispatch_loop, &&dispatch_check_global,
+            &&dispatch_slide, &&dispatch_add_local_imm, &&dispatch_inc_local,
+            &&dispatch_abs_local, &&dispatch_compare_local,
+            &&dispatch_get_ind_local, &&dispatch_get_ind_local_offset,
+            &&dispatch_copy_ind_local, &&dispatch_set_ind_local_value,
+            &&dispatch_switch, &&dispatch_switch,
+        };
+        goto *dispatch_table[opcode];
+dispatch_switch:
+#endif
+        switch(opcode){
             case OP_NULL:
                 stk.push_back(Value());
                 break;
@@ -492,6 +515,211 @@ bool VM::run(){
                 throw_error("Invalid opcode");
                 break;
         }
+        continue;
+
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(SYMBSCRIPT_PORTABLE_DISPATCH)
+dispatch_null:
+        stk.push_back(Value());
+        continue;
+
+dispatch_const:
+        stk.push_back(prog->consts[(*(ip++))]);
+        continue;
+
+dispatch_pop:
+        stk.pop_back();
+        continue;
+
+dispatch_app_pop: {
+        Value toapp = pop();
+        Value list = pop();
+        if (!list.is_list()){
+            throw_error("Operand must be a list");
+        }
+        list.get_list()->push_back(toapp);
+        continue;
+    }
+
+dispatch_set_global_pop: {
+        const uint8_t index = *(ip++);
+        globals[index] = pop();
+        global_defined[index] = 1;
+        continue;
+    }
+
+dispatch_get_global: {
+        const uint8_t index = *(ip++);
+        if (!global_defined[index]){
+            throw_error("Undefined global");
+        }
+        stk.push_back(globals[index]);
+        continue;
+    }
+
+dispatch_set_local_pop: {
+        const uint8_t index = *(ip++);
+        const Value value = pop();
+        stk[index+frames.back().stack_start] = value;
+        continue;
+    }
+
+dispatch_get_local:
+        stk.push_back(stk[(*(ip++))+frames.back().stack_start]);
+        continue;
+
+dispatch_jump_false_pop: {
+        const bool condition = pop().get_int();
+        const uint16_t offset = read_short();
+        if (!condition){
+            ip += offset;
+        }
+        continue;
+    }
+
+dispatch_loop:
+        ip -= read_short();
+        continue;
+
+dispatch_check_global: {
+        const uint8_t index = *(ip++);
+        if (!global_defined[index]){
+            throw_error("Undefined global");
+        }
+        continue;
+    }
+
+dispatch_slide: {
+        const uint8_t count = *(ip++);
+        const Value result = pop();
+        stk.resize(stk.size()-count);
+        stk.push_back(result);
+        continue;
+    }
+
+dispatch_add_local_imm: {
+        const uint8_t index = *(ip++);
+        const int amount = static_cast<int8_t>(*(ip++));
+        const Value& value = stk[frames.back().stack_start+index];
+        if (!value.is_int()){
+            throw_error("Operands must be integers");
+        }
+        stk.push_back(Value(value.get_int()+amount));
+        continue;
+    }
+
+dispatch_inc_local: {
+        const uint8_t index = *(ip++);
+        const int amount = static_cast<int8_t>(*(ip++));
+        Value& value = stk[frames.back().stack_start+index];
+        if (!value.is_int()){
+            throw_error("Operands must be integers");
+        }
+        value.val.i += amount;
+        continue;
+    }
+
+dispatch_abs_local: {
+        const uint8_t index = *(ip++);
+        const Value& value = stk[frames.back().stack_start+index];
+        if (value.is_int()){
+            stk.push_back(Value(abs(value.get_int())));
+        }
+        else if (value.is_list()){
+            stk.push_back(Value(static_cast<int>(value.get_list()->size())));
+        }
+        else {
+            throw_error("Operand must be an integer or a list");
+        }
+        continue;
+    }
+
+dispatch_compare_local: {
+        const uint8_t left_local = *(ip++);
+        const uint8_t right_local = *(ip++);
+        const uint8_t operation = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        const Value& a = stk[frame+left_local];
+        const Value& b = stk[frame+right_local];
+        bool result;
+        switch (operation){
+            case OP_EQ: result = a == b; break;
+            case OP_NE: result = !(a == b); break;
+            case OP_GRTR: result = a > b; break;
+            case OP_GE: result = !(a < b); break;
+            case OP_LESS: result = a < b; break;
+            case OP_LE: result = !(a > b); break;
+            default: result = false; break;
+        }
+        stk.push_back(Value(result));
+        continue;
+    }
+
+dispatch_get_ind_local:
+dispatch_get_ind_local_offset: {
+        const bool has_offset = opcode == OP_GET_IND_LOCAL_OFFSET;
+        const uint8_t list_local = *(ip++);
+        const uint8_t index_local = *(ip++);
+        const int offset = has_offset ? static_cast<int8_t>(*(ip++)) : 0;
+        const size_t frame = frames.back().stack_start;
+        const Value& list_value = stk[frame+list_local];
+        const Value& index_value = stk[frame+index_local];
+        if (!list_value.is_list() || !index_value.is_int()){
+            throw_error("Invalid operation");
+        }
+        const int index = index_value.get_int()+offset;
+        vector<Value>* const list = list_value.get_list();
+        if (index < 0 || static_cast<size_t>(index) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        stk.push_back((*list)[index]);
+        continue;
+    }
+
+dispatch_copy_ind_local: {
+        const uint8_t list_local = *(ip++);
+        const uint8_t target_local = *(ip++);
+        const uint8_t source_local = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        Value& list_value = stk[frame+list_local];
+        const Value& target_value = stk[frame+target_local];
+        const Value& source_value = stk[frame+source_local];
+        if (!list_value.is_list() || !target_value.is_int() || !source_value.is_int()){
+            throw_error("Invalid operation");
+        }
+        vector<Value>* const list = list_value.get_list();
+        const int source = source_value.get_int();
+        if (source < 0 || static_cast<size_t>(source) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        const Value copied = (*list)[source];
+        const int target = target_value.get_int();
+        if (target < 0 || static_cast<size_t>(target) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        (*list)[target] = copied;
+        continue;
+    }
+
+dispatch_set_ind_local_value: {
+        const uint8_t list_local = *(ip++);
+        const uint8_t target_local = *(ip++);
+        const uint8_t value_local = *(ip++);
+        const size_t frame = frames.back().stack_start;
+        Value& list_value = stk[frame+list_local];
+        const Value& target_value = stk[frame+target_local];
+        const Value copied = stk[frame+value_local];
+        if (!list_value.is_list() || !target_value.is_int()){
+            throw_error("Invalid operation");
+        }
+        vector<Value>* const list = list_value.get_list();
+        const int target = target_value.get_int();
+        if (target < 0 || static_cast<size_t>(target) >= list->size()){
+            throw_error("Index out of bounds");
+        }
+        (*list)[target] = copied;
+        continue;
+    }
+#endif
     }
     
     return 0;
